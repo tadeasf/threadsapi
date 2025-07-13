@@ -75,10 +75,12 @@ export default function PostsPage() {
     useEffect(() => {
         fetchPosts()
         fetchStatistics()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     useEffect(() => {
         filterAndSortPosts()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [posts, searchTerm, selectedMediaType, sortBy, sortOrder])
 
     const fetchPosts = async () => {

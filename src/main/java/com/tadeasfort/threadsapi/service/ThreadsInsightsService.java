@@ -2,6 +2,8 @@ package com.tadeasfort.threadsapi.service;
 
 import com.tadeasfort.threadsapi.entity.ThreadsInsight;
 import com.tadeasfort.threadsapi.repository.ThreadsInsightRepository;
+import com.tadeasfort.threadsapi.aspect.RateLimitAspect.RateLimit;
+import com.tadeasfort.threadsapi.aspect.RateLimitAspect.RateLimitType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -45,6 +47,7 @@ public class ThreadsInsightsService {
     /**
      * Fetch and store user insights from Threads API
      */
+    @RateLimit(type = RateLimitType.API_CALL, userIdParamIndex = 0)
     public List<ThreadsInsight> fetchAndStoreUserInsights(String userId, String accessToken) {
         try {
             String url = UriComponentsBuilder.fromUriString(THREADS_API_BASE_URL + "/me/threads_insights")
@@ -82,6 +85,7 @@ public class ThreadsInsightsService {
     /**
      * Fetch and store media insights for a specific post
      */
+    @RateLimit(type = RateLimitType.API_CALL, userIdParamIndex = 1)
     public List<ThreadsInsight> fetchAndStoreMediaInsights(String postId, String userId, String accessToken) {
         try {
             String url = UriComponentsBuilder.fromUriString(THREADS_API_BASE_URL + "/" + postId + "/insights")

@@ -58,8 +58,26 @@ interface AppSettings {
     theme: 'light' | 'dark' | 'system'
 }
 
+interface RateLimitStatus {
+    userId: string
+    callsUsed: number
+    maxCalls: number
+    remainingCalls: number
+    postsUsed: number
+    maxPosts: number
+    remainingPosts: number
+    repliesUsed: number
+    maxReplies: number
+    remainingReplies: number
+    callsUsagePercent: number
+    postsUsagePercent: number
+    repliesUsagePercent: number
+    impressions: number
+}
+
 export default function SettingsPage() {
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+    const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus | null>(null)
     const [settings, setSettings] = useState<AppSettings>({
         cacheEnabled: true,
         cacheDuration: 1,
@@ -75,21 +93,32 @@ export default function SettingsPage() {
     useEffect(() => {
         fetchUserData()
         loadSettings()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const fetchUserData = async () => {
         try {
             const token = localStorage.getItem('threads_access_token')
+            const userId = localStorage.getItem('threads_user_id')
 
-            if (!token) {
+            if (!token || !userId) {
                 router.push('/login')
                 return
             }
 
-            const profileResponse = await fetch(`${API_BASE_URL}/api/user/profile?accessToken=${token}`)
+            const [profileResponse, rateLimitResponse] = await Promise.all([
+                fetch(`${API_BASE_URL}/api/user/profile?accessToken=${token}`),
+                fetch(`${API_BASE_URL}/api/rate-limit/status/${userId}`)
+            ])
+
             if (profileResponse.ok) {
                 const profile = await profileResponse.json()
                 setUserProfile(profile)
+            }
+
+            if (rateLimitResponse.ok) {
+                const rateLimit = await rateLimitResponse.json()
+                setRateLimitStatus(rateLimit)
             }
 
         } catch (error) {
@@ -390,6 +419,67 @@ export default function SettingsPage() {
 
                     {/* Sidebar */}
                     <div className="space-y-6">
+                        {/* Rate Limiting Status */}
+                        {rateLimitStatus && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center">
+                                        <Clock className="h-5 w-5 mr-2" />
+                                        Rate Limits (24h)
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="space-y-3">
+                                        <div>
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span>API Calls</span>
+                                                <span>{rateLimitStatus.callsUsed} / {rateLimitStatus.maxCalls}</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div
+                                                    className={`h-2 rounded-full ${rateLimitStatus.callsUsagePercent > 80 ? 'bg-red-500' : rateLimitStatus.callsUsagePercent > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                                                    style={{ width: `${Math.min(rateLimitStatus.callsUsagePercent, 100)}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span>Posts</span>
+                                                <span>{rateLimitStatus.postsUsed} / {rateLimitStatus.maxPosts}</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div
+                                                    className={`h-2 rounded-full ${rateLimitStatus.postsUsagePercent > 80 ? 'bg-red-500' : rateLimitStatus.postsUsagePercent > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                                                    style={{ width: `${Math.min(rateLimitStatus.postsUsagePercent, 100)}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span>Replies</span>
+                                                <span>{rateLimitStatus.repliesUsed} / {rateLimitStatus.maxReplies}</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div
+                                                    className={`h-2 rounded-full ${rateLimitStatus.repliesUsagePercent > 80 ? 'bg-red-500' : rateLimitStatus.repliesUsagePercent > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                                                    style={{ width: `${Math.min(rateLimitStatus.repliesUsagePercent, 100)}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-2 border-t">
+                                            <div className="flex justify-between text-xs text-gray-500">
+                                                <span>Impressions</span>
+                                                <span>{rateLimitStatus.impressions}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
                         {/* Quick Stats */}
                         <Card>
                             <CardHeader>

@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useRouter, useSearchParams } from "next/navigation"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:10081"
 
-export default function LoginPage() {
+function LoginContent() {
     const [isLoading] = useState(false)
     const [authUrl, setAuthUrl] = useState<string | null>(null)
     const [redirectUri, setRedirectUri] = useState<string | null>(null)
@@ -124,5 +124,17 @@ export default function LoginPage() {
                 </CardContent>
             </Card>
         </div>
+    )
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            </div>
+        }>
+            <LoginContent />
+        </Suspense>
     )
 } 

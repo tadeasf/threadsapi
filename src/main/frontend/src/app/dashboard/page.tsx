@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -45,19 +45,7 @@ export default function DashboardPage() {
         },
     })
 
-    useEffect(() => {
-        // Check if user is authenticated
-        const token = localStorage.getItem('threads_access_token')
-        if (!token) {
-            router.push('/login')
-            return
-        }
-
-        setAccessToken(token)
-        fetchUserProfile(token)
-    }, [router])
-
-    const fetchUserProfile = async (token: string) => {
+    const fetchUserProfile = useCallback(async (token: string) => {
         try {
             const response = await fetch(`${API_BASE_URL}/api/user/profile?accessToken=${token}`)
             if (response.ok) {
@@ -76,7 +64,19 @@ export default function DashboardPage() {
             console.error('Error fetching user profile:', error)
             setIsTokenValid(false)
         }
-    }
+    }, [router])
+
+    useEffect(() => {
+        // Check if user is authenticated
+        const token = localStorage.getItem('threads_access_token')
+        if (!token) {
+            router.push('/login')
+            return
+        }
+
+        setAccessToken(token)
+        fetchUserProfile(token)
+    }, [router, fetchUserProfile])
 
     const onSubmit = async (data: PostFormData) => {
         if (!accessToken) return
