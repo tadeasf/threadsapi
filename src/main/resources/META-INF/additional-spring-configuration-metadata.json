@@ -1,0 +1,39 @@
+{
+    "properties": [
+        {
+            "name": "spring.web.cors.allowed-origins",
+            "type": "java.lang.String",
+            "description": "A description for 'spring.web.cors.allowed-origins'"
+        },
+        {
+            "name": "client.token",
+            "type": "java.lang.String",
+            "description": "A description for 'client.token'"
+        },
+        {
+            "name": "app.url",
+            "type": "java.lang.String",
+            "description": "A description for 'app.url'"
+        },
+        {
+            "name": "spring.web.cors.allowed-methods",
+            "type": "java.lang.String",
+            "description": "A description for 'spring.web.cors.allowed-methods'"
+        },
+        {
+            "name": "spring.web.cors.allowed-headers",
+            "type": "java.lang.String",
+            "description": "A description for 'spring.web.cors.allowed-headers'"
+        },
+        {
+            "name": "spring.web.cors.allow-credentials",
+            "type": "java.lang.String",
+            "description": "A description for 'spring.web.cors.allow-credentials'"
+        },
+        {
+            "name": "app.frontend.url",
+            "type": "java.lang.String",
+            "description": "A description for 'app.frontend.url'"
+        }
+    ]
+}

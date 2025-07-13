@@ -1,0 +1,18 @@
+{
+    "resources": {
+        "includes": [
+            {
+                "pattern": ".*\\.properties$"
+            },
+            {
+                "pattern": ".*\\.sql$"
+            },
+            {
+                "pattern": ".*\\.yml$"
+            },
+            {
+                "pattern": ".*\\.yaml$"
+            }
+        ]
+    }
+}

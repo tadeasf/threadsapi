@@ -1,0 +1,54 @@
+[
+    {
+        "name": "org.sqlite.JDBC",
+        "methods": [
+            {
+                "name": "<init>",
+                "parameterTypes": []
+            }
+        ]
+    },
+    {
+        "name": "org.sqlite.SQLiteConnection",
+        "methods": [
+            {
+                "name": "<init>",
+                "parameterTypes": [
+                    "java.lang.String",
+                    "java.lang.String",
+                    "java.util.Properties"
+                ]
+            }
+        ]
+    },
+    {
+        "name": "org.hibernate.community.dialect.SQLiteDialect",
+        "allDeclaredConstructors": true,
+        "allDeclaredMethods": true,
+        "allDeclaredFields": true
+    },
+    {
+        "name": "org.hibernate.dialect.Dialect",
+        "allDeclaredConstructors": true,
+        "allDeclaredMethods": true,
+        "allDeclaredFields": true
+    },
+    {
+        "name": "org.hibernate.boot.registry.selector.spi.StrategySelector",
+        "allDeclaredConstructors": true,
+        "allDeclaredMethods": true,
+        "allDeclaredFields": true
+    },
+    {
+        "name": "com.tadeasfort.threadsapi.entity.User",
+        "allDeclaredConstructors": true,
+        "allDeclaredMethods": true,
+        "allDeclaredFields": true
+    },
+    {
+        "name": "com.tadeasfort.threadsapi.entity.Post",
+        "allDeclaredConstructors": true,
+        "allDeclaredMethods": true,
+        "allDeclaredFields": true
+    }
+]
