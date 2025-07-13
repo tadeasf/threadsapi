@@ -218,11 +218,11 @@ export default function InsightsPage() {
 
     // Prepare data for charts
     const totalEngagementData = [
-        { name: 'Views', value: dashboard.totalMediaMetrics.total_views, color: COLORS[0] },
-        { name: 'Likes', value: dashboard.totalMediaMetrics.total_likes, color: COLORS[1] },
-        { name: 'Replies', value: dashboard.totalMediaMetrics.total_replies, color: COLORS[2] },
-        { name: 'Reposts', value: dashboard.totalMediaMetrics.total_reposts, color: COLORS[3] },
-        { name: 'Quotes', value: dashboard.totalMediaMetrics.total_quotes, color: COLORS[4] },
+        { name: 'views', value: dashboard.totalMediaMetrics.total_views, color: COLORS[0] },
+        { name: 'likes', value: dashboard.totalMediaMetrics.total_likes, color: COLORS[1] },
+        { name: 'replies', value: dashboard.totalMediaMetrics.total_replies, color: COLORS[2] },
+        { name: 'reposts', value: dashboard.totalMediaMetrics.total_reposts, color: COLORS[3] },
+        { name: 'quotes', value: dashboard.totalMediaMetrics.total_quotes, color: COLORS[4] },
     ]
 
     const averageEngagementData = [

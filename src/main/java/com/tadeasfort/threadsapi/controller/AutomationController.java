@@ -1,0 +1,457 @@
+package com.tadeasfort.threadsapi.controller;
+
+import com.tadeasfort.threadsapi.entity.DiscoveredPost;
+import com.tadeasfort.threadsapi.entity.KeywordSubscription;
+import com.tadeasfort.threadsapi.repository.DiscoveredPostRepository;
+import com.tadeasfort.threadsapi.repository.KeywordSubscriptionRepository;
+import com.tadeasfort.threadsapi.service.AutomationSchedulerService;
+import com.tadeasfort.threadsapi.service.ThreadsKeywordSearchService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/automation")
+@Tag(name = "Automation", description = "Automation and keyword monitoring APIs")
+public class AutomationController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AutomationController.class);
+
+    @Autowired
+    private KeywordSubscriptionRepository subscriptionRepository;
+
+    @Autowired
+    private DiscoveredPostRepository discoveredPostRepository;
+
+    @Autowired
+    private ThreadsKeywordSearchService keywordSearchService;
+
+    @Autowired
+    private AutomationSchedulerService schedulerService;
+
+    // Keyword Subscription Management
+
+    @PostMapping("/subscriptions")
+    @Operation(summary = "Create a new keyword subscription")
+    public ResponseEntity<?> createSubscription(@RequestBody CreateSubscriptionRequest request) {
+        try {
+            // Check if subscription already exists
+            if (subscriptionRepository.existsByUserIdAndKeywordAndIsActiveTrue(
+                    request.getUserId(), request.getKeyword())) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Subscription for this keyword already exists"));
+            }
+
+            KeywordSubscription subscription = new KeywordSubscription(request.getUserId(), request.getKeyword());
+
+            if (request.getSearchType() != null) {
+                subscription.setSearchType(request.getSearchType());
+            }
+            if (request.getEngagementThreshold() != null) {
+                subscription.setEngagementThreshold(request.getEngagementThreshold());
+            }
+            if (request.getSearchFrequencyHours() != null) {
+                subscription.setSearchFrequencyHours(request.getSearchFrequencyHours());
+            }
+            if (request.getMaxPostsPerSearch() != null) {
+                subscription.setMaxPostsPerSearch(request.getMaxPostsPerSearch());
+            }
+
+            subscription = subscriptionRepository.save(subscription);
+
+            logger.info("Created keyword subscription: {} for user {}",
+                    request.getKeyword(), request.getUserId());
+
+            return ResponseEntity.ok(subscription);
+
+        } catch (Exception e) {
+            logger.error("Error creating subscription: {}", e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to create subscription"));
+        }
+    }
+
+    @GetMapping("/subscriptions/{userId}")
+    @Operation(summary = "Get user's keyword subscriptions")
+    public ResponseEntity<List<KeywordSubscription>> getUserSubscriptions(@PathVariable String userId) {
+        try {
+            List<KeywordSubscription> subscriptions = subscriptionRepository
+                    .findByUserIdOrderByCreatedAtDesc(userId);
+            return ResponseEntity.ok(subscriptions);
+        } catch (Exception e) {
+            logger.error("Error fetching subscriptions for user {}: {}", userId, e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PutMapping("/subscriptions/{subscriptionId}")
+    @Operation(summary = "Update a keyword subscription")
+    public ResponseEntity<?> updateSubscription(@PathVariable Long subscriptionId,
+            @RequestBody UpdateSubscriptionRequest request) {
+        try {
+            Optional<KeywordSubscription> optSubscription = subscriptionRepository.findById(subscriptionId);
+            if (optSubscription.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            KeywordSubscription subscription = optSubscription.get();
+
+            if (request.getIsActive() != null) {
+                subscription.setIsActive(request.getIsActive());
+            }
+            if (request.getEngagementThreshold() != null) {
+                subscription.setEngagementThreshold(request.getEngagementThreshold());
+            }
+            if (request.getSearchFrequencyHours() != null) {
+                subscription.setSearchFrequencyHours(request.getSearchFrequencyHours());
+            }
+            if (request.getMaxPostsPerSearch() != null) {
+                subscription.setMaxPostsPerSearch(request.getMaxPostsPerSearch());
+            }
+            if (request.getSearchType() != null) {
+                subscription.setSearchType(request.getSearchType());
+            }
+
+            subscription = subscriptionRepository.save(subscription);
+
+            logger.info("Updated subscription {} for user {}",
+                    subscriptionId, subscription.getUserId());
+
+            return ResponseEntity.ok(subscription);
+
+        } catch (Exception e) {
+            logger.error("Error updating subscription {}: {}", subscriptionId, e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to update subscription"));
+        }
+    }
+
+    @DeleteMapping("/subscriptions/{subscriptionId}")
+    @Operation(summary = "Delete a keyword subscription")
+    public ResponseEntity<?> deleteSubscription(@PathVariable Long subscriptionId) {
+        try {
+            if (!subscriptionRepository.existsById(subscriptionId)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            subscriptionRepository.deleteById(subscriptionId);
+
+            logger.info("Deleted subscription {}", subscriptionId);
+            return ResponseEntity.ok(Map.of("message", "Subscription deleted successfully"));
+
+        } catch (Exception e) {
+            logger.error("Error deleting subscription {}: {}", subscriptionId, e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to delete subscription"));
+        }
+    }
+
+    // Discovered Posts
+
+    @GetMapping("/discovered-posts/{userId}")
+    @Operation(summary = "Get discovered posts for a user")
+    public ResponseEntity<Page<DiscoveredPost>> getDiscoveredPosts(
+            @PathVariable String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Double minEngagementScore) {
+
+        try {
+            Pageable pageable = PageRequest.of(page, size);
+            Page<DiscoveredPost> posts;
+
+            if (keyword != null) {
+                posts = discoveredPostRepository.findByUserIdAndKeywordOrderByEngagementScoreDesc(
+                        userId, keyword, pageable);
+            } else {
+                posts = discoveredPostRepository.findByUserIdOrderByDiscoveredAtDesc(userId, pageable);
+            }
+
+            return ResponseEntity.ok(posts);
+
+        } catch (Exception e) {
+            logger.error("Error fetching discovered posts for user {}: {}", userId, e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping("/discovered-posts/{userId}/top")
+    @Operation(summary = "Get top discovered posts by engagement score")
+    public ResponseEntity<Page<DiscoveredPost>> getTopDiscoveredPosts(
+            @PathVariable String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        try {
+            Pageable pageable = PageRequest.of(page, size);
+            Page<DiscoveredPost> posts = discoveredPostRepository
+                    .findTopPostsByEngagementScore(userId, pageable);
+
+            return ResponseEntity.ok(posts);
+
+        } catch (Exception e) {
+            logger.error("Error fetching top posts for user {}: {}", userId, e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping("/trending-posts")
+    @Operation(summary = "Get trending posts across all users")
+    public ResponseEntity<List<DiscoveredPost>> getTrendingPosts(
+            @RequestParam(defaultValue = "100.0") Double minEngagementScore,
+            @RequestParam(defaultValue = "24") int hoursBack,
+            @RequestParam(defaultValue = "50") int limit) {
+
+        try {
+            List<DiscoveredPost> trendingPosts = keywordSearchService
+                    .getTrendingPosts(minEngagementScore, hoursBack, limit);
+
+            return ResponseEntity.ok(trendingPosts);
+
+        } catch (Exception e) {
+            logger.error("Error fetching trending posts: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    // Manual Search
+
+    @PostMapping("/search")
+    @Operation(summary = "Manually trigger a keyword search")
+    public ResponseEntity<?> manualSearch(@RequestBody ManualSearchRequest request) {
+        try {
+            // Check rate limits
+            if (!keywordSearchService.checkRateLimit(request.getUserId())) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Daily search limit exceeded"));
+            }
+
+            List<DiscoveredPost> results = keywordSearchService.searchKeyword(
+                    request.getUserId(),
+                    request.getKeyword(),
+                    request.getAccessToken(),
+                    request.getSearchType() != null ? request.getSearchType() : KeywordSubscription.SearchType.TOP);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Search completed successfully",
+                    "postsFound", results.size(),
+                    "remainingQuota", keywordSearchService.getRemainingQuota(request.getUserId()),
+                    "posts", results));
+
+        } catch (Exception e) {
+            logger.error("Error performing manual search: {}", e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Search failed: " + e.getMessage()));
+        }
+    }
+
+    // Analytics
+
+    @GetMapping("/analytics/{userId}")
+    @Operation(summary = "Get automation analytics for a user")
+    public ResponseEntity<?> getAnalytics(@PathVariable String userId) {
+        try {
+            // Get subscription statistics
+            long activeSubscriptions = subscriptionRepository.countByUserIdAndIsActiveTrue(userId);
+            Object[] keywordStats = subscriptionRepository.getUserKeywordStats(userId);
+
+            // Get discovered posts statistics
+            long postsToday = discoveredPostRepository.countPostsDiscoveredToday(userId, LocalDateTime.now());
+            List<Object[]> keywordPerformance = discoveredPostRepository.getKeywordPerformanceSummary(userId);
+
+            // Get rate limit info
+            int remainingQuota = keywordSearchService.getRemainingQuota(userId);
+
+            return ResponseEntity.ok(Map.of(
+                    "activeSubscriptions", activeSubscriptions,
+                    "totalSearches", keywordStats != null && keywordStats[0] != null ? keywordStats[0] : 0,
+                    "totalPostsFound", keywordStats != null && keywordStats[1] != null ? keywordStats[1] : 0,
+                    "postsDiscoveredToday", postsToday,
+                    "remainingDailyQuota", remainingQuota,
+                    "keywordPerformance", keywordPerformance));
+
+        } catch (Exception e) {
+            logger.error("Error fetching analytics for user {}: {}", userId, e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to fetch analytics"));
+        }
+    }
+
+    @PostMapping("/trigger/{userId}")
+    @Operation(summary = "Manually trigger subscription processing for a user")
+    public ResponseEntity<?> triggerProcessing(@PathVariable String userId) {
+        try {
+            schedulerService.processUserSubscriptionsManually(userId);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Subscription processing triggered successfully"));
+
+        } catch (Exception e) {
+            logger.error("Error triggering processing for user {}: {}", userId, e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to trigger processing"));
+        }
+    }
+
+    // Request DTOs
+
+    public static class CreateSubscriptionRequest {
+        private String userId;
+        private String keyword;
+        private KeywordSubscription.SearchType searchType;
+        private Integer engagementThreshold;
+        private Integer searchFrequencyHours;
+        private Integer maxPostsPerSearch;
+
+        // Getters and setters
+        public String getUserId() {
+            return userId;
+        }
+
+        public void setUserId(String userId) {
+            this.userId = userId;
+        }
+
+        public String getKeyword() {
+            return keyword;
+        }
+
+        public void setKeyword(String keyword) {
+            this.keyword = keyword;
+        }
+
+        public KeywordSubscription.SearchType getSearchType() {
+            return searchType;
+        }
+
+        public void setSearchType(KeywordSubscription.SearchType searchType) {
+            this.searchType = searchType;
+        }
+
+        public Integer getEngagementThreshold() {
+            return engagementThreshold;
+        }
+
+        public void setEngagementThreshold(Integer engagementThreshold) {
+            this.engagementThreshold = engagementThreshold;
+        }
+
+        public Integer getSearchFrequencyHours() {
+            return searchFrequencyHours;
+        }
+
+        public void setSearchFrequencyHours(Integer searchFrequencyHours) {
+            this.searchFrequencyHours = searchFrequencyHours;
+        }
+
+        public Integer getMaxPostsPerSearch() {
+            return maxPostsPerSearch;
+        }
+
+        public void setMaxPostsPerSearch(Integer maxPostsPerSearch) {
+            this.maxPostsPerSearch = maxPostsPerSearch;
+        }
+    }
+
+    public static class UpdateSubscriptionRequest {
+        private Boolean isActive;
+        private Integer engagementThreshold;
+        private Integer searchFrequencyHours;
+        private Integer maxPostsPerSearch;
+        private KeywordSubscription.SearchType searchType;
+
+        // Getters and setters
+        public Boolean getIsActive() {
+            return isActive;
+        }
+
+        public void setIsActive(Boolean isActive) {
+            this.isActive = isActive;
+        }
+
+        public Integer getEngagementThreshold() {
+            return engagementThreshold;
+        }
+
+        public void setEngagementThreshold(Integer engagementThreshold) {
+            this.engagementThreshold = engagementThreshold;
+        }
+
+        public Integer getSearchFrequencyHours() {
+            return searchFrequencyHours;
+        }
+
+        public void setSearchFrequencyHours(Integer searchFrequencyHours) {
+            this.searchFrequencyHours = searchFrequencyHours;
+        }
+
+        public Integer getMaxPostsPerSearch() {
+            return maxPostsPerSearch;
+        }
+
+        public void setMaxPostsPerSearch(Integer maxPostsPerSearch) {
+            this.maxPostsPerSearch = maxPostsPerSearch;
+        }
+
+        public KeywordSubscription.SearchType getSearchType() {
+            return searchType;
+        }
+
+        public void setSearchType(KeywordSubscription.SearchType searchType) {
+            this.searchType = searchType;
+        }
+    }
+
+    public static class ManualSearchRequest {
+        private String userId;
+        private String keyword;
+        private String accessToken;
+        private KeywordSubscription.SearchType searchType;
+
+        // Getters and setters
+        public String getUserId() {
+            return userId;
+        }
+
+        public void setUserId(String userId) {
+            this.userId = userId;
+        }
+
+        public String getKeyword() {
+            return keyword;
+        }
+
+        public void setKeyword(String keyword) {
+            this.keyword = keyword;
+        }
+
+        public String getAccessToken() {
+            return accessToken;
+        }
+
+        public void setAccessToken(String accessToken) {
+            this.accessToken = accessToken;
+        }
+
+        public KeywordSubscription.SearchType getSearchType() {
+            return searchType;
+        }
+
+        public void setSearchType(KeywordSubscription.SearchType searchType) {
+            this.searchType = searchType;
+        }
+    }
+}
