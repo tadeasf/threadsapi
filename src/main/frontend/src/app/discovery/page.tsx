@@ -1,7 +1,49 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, TrendingUp, Eye, Heart, MessageCircle, Repeat, Quote, Calendar, AlertCircle, Trash2, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import Header from '@/components/Header';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+    Plus,
+    Search,
+    TrendingUp,
+    Eye,
+    Heart,
+    MessageCircle,
+    Repeat,
+    Quote,
+    Calendar,
+    AlertCircle,
+    Trash2,
+    ChevronDown,
+    ChevronUp,
+    ExternalLink,
+    RefreshCw
+} from 'lucide-react';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:10081";
 
 interface KeywordSubscription {
     id: number;
@@ -42,20 +84,28 @@ export default function DiscoveryPage() {
     const [subscriptions, setSubscriptions] = useState<KeywordSubscription[]>([]);
     const [discoveredPosts, setDiscoveredPosts] = useState<{ [keyword: string]: DiscoveredPost[] }>({});
     const [expandedKeywords, setExpandedKeywords] = useState<Set<string>>(new Set());
-    const [loading, setLoading] = useState(true);
-    const [showAddForm, setShowAddForm] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [showAddDialog, setShowAddDialog] = useState(false);
     const [newSubscription, setNewSubscription] = useState<NewSubscription>({
         keyword: '',
         searchFrequencyHours: 24,
         minEngagementThreshold: 10,
         searchType: 'TEXT'
     });
+    const router = useRouter();
 
     const fetchSubscriptions = useCallback(async () => {
         try {
-            const response = await fetch('/api/automation/subscriptions', {
-                credentials: 'include'
-            });
+            const token = localStorage.getItem('threads_access_token');
+            const userId = localStorage.getItem('threads_user_id');
+
+            if (!token || !userId) {
+                router.push('/login');
+                return;
+            }
+
+            const response = await fetch(`${API_BASE_URL}/api/automation/subscriptions?userId=${userId}&accessToken=${token}`);
             if (response.ok) {
                 const data = await response.json();
                 setSubscriptions(data);
@@ -67,9 +117,9 @@ export default function DiscoveryPage() {
         } catch (error) {
             console.error('Error fetching subscriptions:', error);
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
-    }, []);
+    }, [router]);
 
     useEffect(() => {
         fetchSubscriptions();
@@ -77,9 +127,12 @@ export default function DiscoveryPage() {
 
     const fetchDiscoveredPosts = async (keyword: string) => {
         try {
-            const response = await fetch(`/api/automation/discovered-posts/me?keyword=${encodeURIComponent(keyword)}&limit=10&sortBy=engagementScore`, {
-                credentials: 'include'
-            });
+            const token = localStorage.getItem('threads_access_token');
+            const userId = localStorage.getItem('threads_user_id');
+
+            if (!token || !userId) return;
+
+            const response = await fetch(`${API_BASE_URL}/api/automation/discovered-posts/${userId}?keyword=${encodeURIComponent(keyword)}&limit=10&sortBy=engagementScore&accessToken=${token}`);
             if (response.ok) {
                 const posts = await response.json();
                 setDiscoveredPosts(prev => ({
@@ -96,12 +149,19 @@ export default function DiscoveryPage() {
         if (!newSubscription.keyword.trim()) return;
 
         try {
-            const response = await fetch('/api/automation/subscriptions', {
+            const token = localStorage.getItem('threads_access_token');
+            const userId = localStorage.getItem('threads_user_id');
+
+            if (!token || !userId) {
+                router.push('/login');
+                return;
+            }
+
+            const response = await fetch(`${API_BASE_URL}/api/automation/subscriptions?userId=${userId}&accessToken=${token}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                credentials: 'include',
                 body: JSON.stringify(newSubscription)
             });
 
@@ -114,7 +174,7 @@ export default function DiscoveryPage() {
                     minEngagementThreshold: 10,
                     searchType: 'TEXT'
                 });
-                setShowAddForm(false);
+                setShowAddDialog(false);
                 // Fetch posts for the new keyword
                 fetchDiscoveredPosts(subscription.keyword);
             }
@@ -125,9 +185,13 @@ export default function DiscoveryPage() {
 
     const deleteSubscription = async (id: number, keyword: string) => {
         try {
-            const response = await fetch(`/api/automation/subscriptions/${id}`, {
-                method: 'DELETE',
-                credentials: 'include'
+            const token = localStorage.getItem('threads_access_token');
+            const userId = localStorage.getItem('threads_user_id');
+
+            if (!token || !userId) return;
+
+            const response = await fetch(`${API_BASE_URL}/api/automation/subscriptions/${id}?userId=${userId}&accessToken=${token}`, {
+                method: 'DELETE'
             });
 
             if (response.ok) {
@@ -162,18 +226,25 @@ export default function DiscoveryPage() {
 
     const triggerManualSearch = async (keyword: string) => {
         try {
-            await fetch('/api/automation/search', {
+            const token = localStorage.getItem('threads_access_token');
+            const userId = localStorage.getItem('threads_user_id');
+
+            if (!token || !userId) return;
+
+            setIsRefreshing(true);
+            await fetch(`${API_BASE_URL}/api/automation/search?userId=${userId}&accessToken=${token}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                credentials: 'include',
                 body: JSON.stringify({ keyword })
             });
             // Refresh discovered posts after manual search
             setTimeout(() => fetchDiscoveredPosts(keyword), 2000);
         } catch (error) {
             console.error('Error triggering manual search:', error);
+        } finally {
+            setIsRefreshing(false);
         }
     };
 
@@ -182,7 +253,12 @@ export default function DiscoveryPage() {
     };
 
     const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString();
+        return new Date(dateString).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     };
 
     const getSearchTypeIcon = (type: string) => {
@@ -193,17 +269,21 @@ export default function DiscoveryPage() {
         }
     };
 
-    if (loading) {
+    const refreshAllData = async () => {
+        setIsRefreshing(true);
+        await fetchSubscriptions();
+        setIsRefreshing(false);
+    };
+
+    if (isLoading) {
         return (
-            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
-                <div className="max-w-6xl mx-auto">
-                    <div className="animate-pulse">
-                        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-6"></div>
-                        <div className="space-y-4">
-                            {[1, 2, 3].map(i => (
-                                <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                            ))}
-                        </div>
+            <div className="min-h-screen bg-gray-50">
+                <Header />
+                <div className="container mx-auto px-4 py-8">
+                    <div className="animate-pulse space-y-4">
+                        <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+                        <div className="h-32 bg-gray-200 rounded"></div>
+                        <div className="h-64 bg-gray-200 rounded"></div>
                     </div>
                 </div>
             </div>
@@ -211,136 +291,143 @@ export default function DiscoveryPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
-            <div className="max-w-6xl mx-auto">
+        <div className="min-h-screen bg-gray-50">
+            <Header />
+
+            <div className="container mx-auto px-4 py-8">
                 {/* Header */}
-                <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center justify-between mb-8">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Content Discovery</h1>
-                        <p className="text-gray-600 dark:text-gray-400">
+                        <h1 className="text-3xl font-bold text-gray-900">Content Discovery</h1>
+                        <p className="text-gray-600 mt-2">
                             Monitor keywords and discover trending content automatically
                         </p>
                     </div>
-                    <button
-                        onClick={() => setShowAddForm(true)}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 font-medium transition-colors"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Add Keyword
-                    </button>
+                    <div className="flex items-center gap-4">
+                        <Button onClick={refreshAllData} disabled={isRefreshing} variant="outline">
+                            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+                        </Button>
+                        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+                            <DialogTrigger asChild>
+                                <Button>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Add Keyword
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Add New Keyword Subscription</DialogTitle>
+                                    <DialogDescription>
+                                        Create a new keyword subscription to monitor trending content
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label htmlFor="keyword" className="text-right">
+                                            Keyword
+                                        </Label>
+                                        <Input
+                                            id="keyword"
+                                            value={newSubscription.keyword}
+                                            onChange={(e) => setNewSubscription(prev => ({ ...prev, keyword: e.target.value }))}
+                                            placeholder="Enter keyword..."
+                                            className="col-span-3"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label htmlFor="searchType" className="text-right">
+                                            Search Type
+                                        </Label>
+                                        <Select
+                                            value={newSubscription.searchType}
+                                            onValueChange={(value: 'TEXT' | 'HASHTAG' | 'MENTION') =>
+                                                setNewSubscription(prev => ({ ...prev, searchType: value }))
+                                            }
+                                        >
+                                            <SelectTrigger className="col-span-3">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="TEXT">Text</SelectItem>
+                                                <SelectItem value="HASHTAG">Hashtag</SelectItem>
+                                                <SelectItem value="MENTION">Mention</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label htmlFor="frequency" className="text-right">
+                                            Frequency (hours)
+                                        </Label>
+                                        <Input
+                                            id="frequency"
+                                            type="number"
+                                            min="1"
+                                            max="168"
+                                            value={newSubscription.searchFrequencyHours}
+                                            onChange={(e) => setNewSubscription(prev => ({ ...prev, searchFrequencyHours: parseInt(e.target.value) }))}
+                                            className="col-span-3"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-4 items-center gap-4">
+                                        <Label htmlFor="engagement" className="text-right">
+                                            Min Engagement
+                                        </Label>
+                                        <Input
+                                            id="engagement"
+                                            type="number"
+                                            min="0"
+                                            value={newSubscription.minEngagementThreshold}
+                                            onChange={(e) => setNewSubscription(prev => ({ ...prev, minEngagementThreshold: parseInt(e.target.value) }))}
+                                            className="col-span-3"
+                                        />
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button onClick={addSubscription} disabled={!newSubscription.keyword.trim()}>
+                                        Add Subscription
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    </div>
                 </div>
 
-                {/* Add Subscription Form */}
-                {showAddForm && (
-                    <div className="bg-white dark:bg-gray-800 p-6 mb-6 border border-gray-200 dark:border-gray-700">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add New Keyword Subscription</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Keyword
-                                </label>
-                                <input
-                                    type="text"
-                                    value={newSubscription.keyword}
-                                    onChange={(e) => setNewSubscription(prev => ({ ...prev, keyword: e.target.value }))}
-                                    placeholder="Enter keyword..."
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Search Type
-                                </label>
-                                <select
-                                    value={newSubscription.searchType}
-                                    onChange={(e) => setNewSubscription(prev => ({ ...prev, searchType: e.target.value as 'TEXT' | 'HASHTAG' | 'MENTION' }))}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                    <option value="TEXT">Text</option>
-                                    <option value="HASHTAG">Hashtag</option>
-                                    <option value="MENTION">Mention</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Search Frequency (hours)
-                                </label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="168"
-                                    value={newSubscription.searchFrequencyHours}
-                                    onChange={(e) => setNewSubscription(prev => ({ ...prev, searchFrequencyHours: parseInt(e.target.value) }))}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Min Engagement
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={newSubscription.minEngagementThreshold}
-                                    onChange={(e) => setNewSubscription(prev => ({ ...prev, minEngagementThreshold: parseInt(e.target.value) }))}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-                        </div>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={addSubscription}
-                                disabled={!newSubscription.keyword.trim()}
-                                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 font-medium transition-colors"
-                            >
-                                Add Subscription
-                            </button>
-                            <button
-                                onClick={() => setShowAddForm(false)}
-                                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 font-medium transition-colors"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                )}
-
                 {/* Subscriptions List */}
-                <div className="space-y-4">
+                <div className="space-y-6">
                     {subscriptions.length === 0 ? (
-                        <div className="text-center py-12">
-                            <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No keyword subscriptions yet</h3>
-                            <p className="text-gray-600 dark:text-gray-400 mb-4">
-                                Add your first keyword to start discovering trending content
-                            </p>
-                            <button
-                                onClick={() => setShowAddForm(true)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 font-medium transition-colors"
-                            >
-                                Add Keyword
-                            </button>
-                        </div>
+                        <Card>
+                            <CardContent className="text-center py-12">
+                                <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                                <CardTitle className="mb-2">No keyword subscriptions yet</CardTitle>
+                                <CardDescription className="mb-4">
+                                    Add your first keyword to start discovering trending content
+                                </CardDescription>
+                                <Button onClick={() => setShowAddDialog(true)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Add Keyword
+                                </Button>
+                            </CardContent>
+                        </Card>
                     ) : (
                         subscriptions.map((subscription) => {
                             const posts = discoveredPosts[subscription.keyword] || [];
                             const isExpanded = expandedKeywords.has(subscription.keyword);
 
                             return (
-                                <div key={subscription.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                    {/* Subscription Header */}
-                                    <div className="p-6">
+                                <Card key={subscription.id}>
+                                    <CardHeader>
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-4">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="w-8 h-8 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
+                                                    <Badge variant="secondary" className="w-8 h-8 flex items-center justify-center p-0">
                                                         {getSearchTypeIcon(subscription.searchType)}
-                                                    </span>
+                                                    </Badge>
                                                     <div>
-                                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                                        <CardTitle className="text-lg">
                                                             {subscription.keyword}
-                                                        </h3>
-                                                        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                                        </CardTitle>
+                                                        <div className="flex items-center gap-4 text-sm text-gray-600">
                                                             <span className="flex items-center gap-1">
                                                                 <Calendar className="w-4 h-4" />
                                                                 Every {subscription.searchFrequencyHours}h
@@ -356,127 +443,127 @@ export default function DiscoveryPage() {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`px-2 py-1 text-xs font-medium ${subscription.active
-                                                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                                                        : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                                                        }`}>
+                                                    <Badge variant={subscription.active ? "default" : "destructive"}>
                                                         {subscription.active ? 'Active' : 'Inactive'}
-                                                    </span>
+                                                    </Badge>
                                                     {posts.length > 0 && (
-                                                        <span className="px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                                                        <Badge variant="outline">
                                                             {posts.length} posts found
-                                                        </span>
+                                                        </Badge>
                                                     )}
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <button
+                                                <Button
                                                     onClick={() => triggerManualSearch(subscription.keyword)}
-                                                    className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                                                    title="Trigger manual search"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={isRefreshing}
                                                 >
                                                     <Search className="w-4 h-4" />
-                                                </button>
-                                                <button
+                                                </Button>
+                                                <Button
                                                     onClick={() => toggleKeywordExpansion(subscription.keyword)}
-                                                    className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+                                                    size="sm"
+                                                    variant="outline"
                                                     disabled={posts.length === 0}
                                                 >
                                                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                                </button>
-                                                <button
+                                                </Button>
+                                                <Button
                                                     onClick={() => deleteSubscription(subscription.id, subscription.keyword)}
-                                                    className="p-2 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                                                    title="Delete subscription"
+                                                    size="sm"
+                                                    variant="outline"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                </Button>
                                             </div>
                                         </div>
-                                    </div>
+                                    </CardHeader>
 
                                     {/* Discovered Posts Accordion */}
-                                    {isExpanded && posts.length > 0 && (
-                                        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                                            <div className="p-6">
-                                                <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                                                    <TrendingUp className="w-4 h-4" />
-                                                    Top Performing Posts
-                                                </h4>
+                                    {isExpanded && (
+                                        <CardContent className="pt-0">
+                                            {posts.length > 0 ? (
                                                 <div className="space-y-4">
+                                                    <div className="flex items-center gap-2 mb-4">
+                                                        <TrendingUp className="w-4 h-4" />
+                                                        <h4 className="font-semibold">Top Performing Posts</h4>
+                                                    </div>
                                                     {posts.map((post) => (
-                                                        <div key={post.id} className="bg-white dark:bg-gray-800 p-4 border border-gray-200 dark:border-gray-700">
-                                                            <div className="flex justify-between items-start mb-3">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-medium text-gray-900 dark:text-white">@{post.username}</span>
-                                                                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                                                                        {formatDate(post.timestamp)}
-                                                                    </span>
+                                                        <Card key={post.id} className="bg-gray-50">
+                                                            <CardContent className="p-4">
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-medium">@{post.username}</span>
+                                                                        <span className="text-sm text-gray-500">
+                                                                            {formatDate(post.timestamp)}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Badge variant="outline">
+                                                                            Score: {post.engagementScore.toFixed(1)}
+                                                                        </Badge>
+                                                                        <Button
+                                                                            asChild
+                                                                            size="sm"
+                                                                            variant="outline"
+                                                                        >
+                                                                            <a
+                                                                                href={post.permalink}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                            >
+                                                                                <ExternalLink className="w-4 h-4" />
+                                                                            </a>
+                                                                        </Button>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                                                                        Score: {post.engagementScore.toFixed(1)}
-                                                                    </span>
-                                                                    <a
-                                                                        href={post.permalink}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="p-1 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                                                                        title="View original post"
-                                                                    >
-                                                                        <ExternalLink className="w-4 h-4" />
-                                                                    </a>
-                                                                </div>
-                                                            </div>
-                                                            <p className="text-gray-900 dark:text-white mb-3 line-clamp-3">
-                                                                {post.text}
-                                                            </p>
-                                                            <div className="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
-                                                                {post.viewCount && (
+                                                                <p className="text-gray-900 mb-3 line-clamp-3">
+                                                                    {post.text}
+                                                                </p>
+                                                                <div className="flex items-center gap-6 text-sm text-gray-600">
+                                                                    {post.viewCount && (
+                                                                        <span className="flex items-center gap-1">
+                                                                            <Eye className="w-4 h-4" />
+                                                                            {post.viewCount.toLocaleString()}
+                                                                        </span>
+                                                                    )}
                                                                     <span className="flex items-center gap-1">
-                                                                        <Eye className="w-4 h-4" />
-                                                                        {post.viewCount.toLocaleString()}
+                                                                        <Heart className="w-4 h-4" />
+                                                                        {post.likeCount.toLocaleString()}
                                                                     </span>
-                                                                )}
-                                                                <span className="flex items-center gap-1">
-                                                                    <Heart className="w-4 h-4" />
-                                                                    {post.likeCount.toLocaleString()}
-                                                                </span>
-                                                                <span className="flex items-center gap-1">
-                                                                    <MessageCircle className="w-4 h-4" />
-                                                                    {post.replyCount.toLocaleString()}
-                                                                </span>
-                                                                <span className="flex items-center gap-1">
-                                                                    <Repeat className="w-4 h-4" />
-                                                                    {post.repostCount.toLocaleString()}
-                                                                </span>
-                                                                <span className="flex items-center gap-1">
-                                                                    <Quote className="w-4 h-4" />
-                                                                    {post.quoteCount.toLocaleString()}
-                                                                </span>
-                                                                <span className="text-xs">
-                                                                    Total: {formatEngagement(post).toLocaleString()}
-                                                                </span>
-                                                            </div>
-                                                        </div>
+                                                                    <span className="flex items-center gap-1">
+                                                                        <MessageCircle className="w-4 h-4" />
+                                                                        {post.replyCount.toLocaleString()}
+                                                                    </span>
+                                                                    <span className="flex items-center gap-1">
+                                                                        <Repeat className="w-4 h-4" />
+                                                                        {post.repostCount.toLocaleString()}
+                                                                    </span>
+                                                                    <span className="flex items-center gap-1">
+                                                                        <Quote className="w-4 h-4" />
+                                                                        {post.quoteCount.toLocaleString()}
+                                                                    </span>
+                                                                    <span className="text-xs font-medium">
+                                                                        Total: {formatEngagement(post).toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
                                                     ))}
                                                 </div>
-                                            </div>
-                                        </div>
+                                            ) : (
+                                                <div className="text-center py-8">
+                                                    <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                                    <p className="text-gray-600">
+                                                        No posts discovered yet for this keyword
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </CardContent>
                                     )}
-
-                                    {/* Empty State for No Posts */}
-                                    {isExpanded && posts.length === 0 && (
-                                        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-6">
-                                            <div className="text-center">
-                                                <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                                <p className="text-gray-600 dark:text-gray-400">
-                                                    No posts discovered yet for this keyword
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
+                                </Card>
                             );
                         })
                     )}
