@@ -40,7 +40,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:1
 
 interface ThreadsPost {
     id: string
-    text: string
+    text: string | null
     mediaType: string
     mediaUrl?: string
     permalink: string
@@ -120,7 +120,8 @@ export default function PostsPage() {
 
     const filterAndSortPosts = () => {
         let filtered = posts.filter(post => {
-            const matchesSearch = post.text.toLowerCase().includes(searchTerm.toLowerCase())
+            const postText = post.text || '' // Handle null/undefined text
+            const matchesSearch = postText.toLowerCase().includes(searchTerm.toLowerCase())
             const matchesMediaType = selectedMediaType === 'all' || post.mediaType === selectedMediaType
             return matchesSearch && matchesMediaType
         })
@@ -381,7 +382,7 @@ export default function PostsPage() {
                                                 <TableCell className="max-w-[300px]">
                                                     <div>
                                                         <p className="font-medium truncate">
-                                                            {post.text.length > 60 ? `${post.text.substring(0, 60)}...` : post.text}
+                                                            {post.text ? (post.text.length > 60 ? `${post.text.substring(0, 60)}...` : post.text) : 'No text content'}
                                                         </p>
                                                         {post.hasReplies && (
                                                             <Badge variant="outline" className="mt-1 text-xs">

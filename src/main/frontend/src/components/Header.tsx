@@ -84,6 +84,13 @@ export default function Header() {
             if (postsResponse.ok) {
                 const postsData = await postsResponse.json()
                 setRecentPosts(postsData.content || [])
+            } else {
+                // Fallback to fetch posts with insights if paginated fails
+                const fallbackResponse = await fetch(`${API_BASE_URL}/api/posts/user/${userId}/insights?accessToken=${token}`)
+                if (fallbackResponse.ok) {
+                    const allPosts = await fallbackResponse.json()
+                    setRecentPosts(allPosts.slice(0, 5)) // Take first 5 posts
+                }
             }
 
             // Fetch post statistics
