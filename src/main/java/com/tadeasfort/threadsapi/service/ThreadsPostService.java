@@ -234,6 +234,11 @@ public class ThreadsPostService {
         Long totalViews = postsRepository.getTotalViewsByUser(userId);
         Long totalLikes = postsRepository.getTotalLikesByUser(userId);
 
+        // Handle null values from repository (in case of no data)
+        totalPosts = totalPosts != null ? totalPosts : 0L;
+        totalViews = totalViews != null ? totalViews : 0L;
+        totalLikes = totalLikes != null ? totalLikes : 0L;
+
         return new PostStatistics(totalPosts, totalViews, totalLikes);
     }
 

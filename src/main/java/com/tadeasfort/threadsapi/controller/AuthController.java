@@ -127,10 +127,21 @@ public class AuthController {
                 // Use the long-lived token if available, otherwise use short-lived
                 ThreadsTokenResponse finalToken = longLivedToken != null ? longLivedToken : tokenResponse;
 
+                // Get user profile to extract the actual user ID
+                String userId = null;
+                try {
+                    Map<String, Object> userProfile = threadsApiClient.getUserProfile(finalToken.getAccessToken());
+                    userId = (String) userProfile.get("id");
+                } catch (Exception e) {
+                    logger.error("Failed to fetch user profile for user ID extraction", e);
+                    // Fallback to token user ID if available
+                    userId = finalToken.getUserId();
+                }
+
                 // Redirect to frontend with token
                 String frontendUrl = getFrontendUrl();
                 String redirectUrl = frontendUrl + "/login?success=true&access_token=" +
-                        finalToken.getAccessToken() + "&user_id=" + finalToken.getUserId();
+                        finalToken.getAccessToken() + "&user_id=" + userId;
 
                 logger.info("Redirecting to frontend: {}", frontendUrl);
 

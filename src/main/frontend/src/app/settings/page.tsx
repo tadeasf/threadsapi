@@ -161,7 +161,7 @@ export default function SettingsPage() {
             // Fetch user data for export
             const [postsResponse, insightsResponse] = await Promise.all([
                 fetch(`${API_BASE_URL}/api/posts/user/${userId}/insights?accessToken=${token}`),
-                fetch(`${API_BASE_URL}/api/insights/user/${userId}/dashboard?accessToken=${token}`)
+                fetch(`${API_BASE_URL}/api/insights/dashboard/${userId}?accessToken=${token}`)
             ])
 
             const exportData = {

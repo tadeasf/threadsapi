@@ -86,7 +86,7 @@ export default function ProfilePage() {
             }
 
             // Fetch user insights
-            const insightsResponse = await fetch(`${API_BASE_URL}/api/insights/user/${userId}/dashboard?accessToken=${token}`)
+            const insightsResponse = await fetch(`${API_BASE_URL}/api/insights/dashboard/${userId}?accessToken=${token}`)
             if (insightsResponse.ok) {
                 const insights = await insightsResponse.json()
                 setUserInsights(insights)

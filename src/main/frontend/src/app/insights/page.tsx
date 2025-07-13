@@ -125,7 +125,7 @@ export default function InsightsPage() {
 
             // Fetch all insights data in parallel
             const [dashboardRes, performanceRes, trendsRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/api/insights/user/${userId}/dashboard?accessToken=${token}`),
+                fetch(`${API_BASE_URL}/api/insights/dashboard/${userId}?accessToken=${token}`),
                 fetch(`${API_BASE_URL}/api/insights/performance/${userId}?days=${selectedPeriod}&accessToken=${token}`),
                 fetch(`${API_BASE_URL}/api/insights/trends/${userId}?days=${selectedPeriod}&accessToken=${token}`)
             ])
