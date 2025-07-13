@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, TrendingUp, Eye, Heart, MessageCircle, Repeat, Quote, Calendar, AlertCircle, Trash2, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 interface KeywordSubscription {
@@ -51,11 +51,7 @@ export default function DiscoveryPage() {
         searchType: 'TEXT'
     });
 
-    useEffect(() => {
-        fetchSubscriptions();
-    }, []);
-
-    const fetchSubscriptions = async () => {
+    const fetchSubscriptions = useCallback(async () => {
         try {
             const response = await fetch('/api/automation/subscriptions', {
                 credentials: 'include'
@@ -73,7 +69,11 @@ export default function DiscoveryPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        fetchSubscriptions();
+    }, [fetchSubscriptions]);
 
     const fetchDiscoveredPosts = async (keyword: string) => {
         try {
@@ -253,7 +253,7 @@ export default function DiscoveryPage() {
                                 </label>
                                 <select
                                     value={newSubscription.searchType}
-                                    onChange={(e) => setNewSubscription(prev => ({ ...prev, searchType: e.target.value as any }))}
+                                    onChange={(e) => setNewSubscription(prev => ({ ...prev, searchType: e.target.value as 'TEXT' | 'HASHTAG' | 'MENTION' }))}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 >
                                     <option value="TEXT">Text</option>
@@ -357,8 +357,8 @@ export default function DiscoveryPage() {
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className={`px-2 py-1 text-xs font-medium ${subscription.active
-                                                            ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                                                            : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                                                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                                                        : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
                                                         }`}>
                                                         {subscription.active ? 'Active' : 'Inactive'}
                                                     </span>
