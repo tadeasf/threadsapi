@@ -3,8 +3,6 @@ package com.tadeasfort.threadsapi.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -16,7 +14,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public class ThreadsRateLimitService {
 
     private static final Logger logger = LoggerFactory.getLogger(ThreadsRateLimitService.class);
-    private static final String THREADS_API_BASE_URL = "https://graph.threads.net/v1.0";
 
     // Rate limit tracking per user
     private final ConcurrentHashMap<String, UserRateLimitInfo> userRateLimits = new ConcurrentHashMap<>();
@@ -178,6 +175,49 @@ public class ThreadsRateLimitService {
         }
     }
 
+    public static class PublishingLimits {
+        private final int maxCallsPerDay;
+        private final long maxCpuTime;
+        private final long maxTotalTime;
+        private final int maxPostsPerDay;
+        private final int maxRepliesPerDay;
+        private final int impressions;
+
+        public PublishingLimits(int maxCallsPerDay, long maxCpuTime, long maxTotalTime,
+                int maxPostsPerDay, int maxRepliesPerDay, int impressions) {
+            this.maxCallsPerDay = maxCallsPerDay;
+            this.maxCpuTime = maxCpuTime;
+            this.maxTotalTime = maxTotalTime;
+            this.maxPostsPerDay = maxPostsPerDay;
+            this.maxRepliesPerDay = maxRepliesPerDay;
+            this.impressions = impressions;
+        }
+
+        public int getMaxCallsPerDay() {
+            return maxCallsPerDay;
+        }
+
+        public long getMaxCpuTime() {
+            return maxCpuTime;
+        }
+
+        public long getMaxTotalTime() {
+            return maxTotalTime;
+        }
+
+        public int getMaxPostsPerDay() {
+            return maxPostsPerDay;
+        }
+
+        public int getMaxRepliesPerDay() {
+            return maxRepliesPerDay;
+        }
+
+        public int getImpressions() {
+            return impressions;
+        }
+    }
+
     /**
      * Check if an API call is allowed for the user
      */
@@ -279,23 +319,27 @@ public class ThreadsRateLimitService {
     }
 
     /**
-     * Fetch publishing limits from Threads API
+     * Calculate publishing limits based on impressions
+     * Formula from Threads API documentation:
+     * - Calls within 24 hours = 4800 * Number of Impressions
+     * - CPU time per day = 720000 * Number of Impressions
+     * - Total time per day = 2880000 * Number of Impressions
+     * - Minimum impressions = 10
      */
-    public void fetchAndUpdatePublishingLimits(String userId, String accessToken, RestTemplate restTemplate) {
-        try {
-            String url = UriComponentsBuilder
-                    .fromUriString(THREADS_API_BASE_URL + "/" + userId + "/threads_publishing_limit")
-                    .queryParam("fields", "quota_usage,config,reply_quota_usage,reply_config")
-                    .queryParam("access_token", accessToken)
-                    .toUriString();
+    public PublishingLimits calculatePublishingLimits(String userId) {
+        UserRateLimitInfo userInfo = getUserRateLimitInfo(userId);
+        int impressions = Math.max(MIN_IMPRESSIONS, userInfo.getImpressions());
 
-            // This would update our local tracking with actual API limits
-            // Implementation depends on your JSON parsing setup
-            logger.info("Fetching publishing limits for user: {}", userId);
+        int maxCallsPerDay = impressions * CALLS_PER_IMPRESSION;
+        long maxCpuTime = impressions * CPU_TIME_PER_IMPRESSION;
+        long maxTotalTime = impressions * TOTAL_TIME_PER_IMPRESSION;
 
-        } catch (Exception e) {
-            logger.warn("Failed to fetch publishing limits for user {}: {}", userId, e.getMessage());
-        }
+        logger.debug(
+                "Calculated publishing limits for user {}: impressions={}, maxCalls={}, maxCpuTime={}, maxTotalTime={}",
+                userId, impressions, maxCallsPerDay, maxCpuTime, maxTotalTime);
+
+        return new PublishingLimits(maxCallsPerDay, maxCpuTime, maxTotalTime,
+                POSTS_PER_24H, REPLIES_PER_24H, impressions);
     }
 
     private UserRateLimitInfo getUserRateLimitInfo(String userId) {

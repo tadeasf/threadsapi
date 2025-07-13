@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import Header from '@/components/Header'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -168,10 +169,12 @@ export default function DashboardPage() {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-4">
                             {userProfile.threads_profile_picture_url && (
-                                <img
+                                <Image
                                     src={userProfile.threads_profile_picture_url}
                                     alt={userProfile.name || userProfile.username}
-                                    className="w-12 h-12 rounded-full"
+                                    width={48}
+                                    height={48}
+                                    className="rounded-full"
                                 />
                             )}
                             <div>

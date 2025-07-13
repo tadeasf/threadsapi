@@ -1,7 +1,9 @@
 package com.tadeasfort.threadsapi.service;
 
 import com.tadeasfort.threadsapi.entity.ThreadsInsight;
+import com.tadeasfort.threadsapi.entity.ThreadsPost;
 import com.tadeasfort.threadsapi.repository.ThreadsInsightRepository;
+import com.tadeasfort.threadsapi.repository.ThreadsPostRepository;
 import com.tadeasfort.threadsapi.aspect.RateLimitAspect.RateLimit;
 import com.tadeasfort.threadsapi.aspect.RateLimitAspect.RateLimitType;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,6 +24,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -39,6 +42,9 @@ public class ThreadsInsightsService {
     private ThreadsInsightRepository insightsRepository;
 
     @Autowired
+    private ThreadsPostRepository postsRepository;
+
+    @Autowired
     private RestTemplate restTemplate;
 
     @Autowired
@@ -46,12 +52,13 @@ public class ThreadsInsightsService {
 
     /**
      * Fetch and store user insights from Threads API
+     * Available metrics: views, likes, replies, quotes, clicks, followers_count
      */
     @RateLimit(type = RateLimitType.API_CALL, userIdParamIndex = 0)
     public List<ThreadsInsight> fetchAndStoreUserInsights(String userId, String accessToken) {
         try {
             String url = UriComponentsBuilder.fromUriString(THREADS_API_BASE_URL + "/me/threads_insights")
-                    .queryParam("metric", "views,followers_count")
+                    .queryParam("metric", "views,likes,replies,quotes,clicks,followers_count")
                     .queryParam("access_token", accessToken)
                     .toUriString();
 
@@ -84,12 +91,13 @@ public class ThreadsInsightsService {
 
     /**
      * Fetch and store media insights for a specific post
+     * Available metrics: views, likes, replies, reposts, quotes, shares
      */
     @RateLimit(type = RateLimitType.API_CALL, userIdParamIndex = 1)
     public List<ThreadsInsight> fetchAndStoreMediaInsights(String postId, String userId, String accessToken) {
         try {
             String url = UriComponentsBuilder.fromUriString(THREADS_API_BASE_URL + "/" + postId + "/insights")
-                    .queryParam("metric", "views,likes,replies,reposts,quotes")
+                    .queryParam("metric", "views,likes,replies,reposts,quotes,shares")
                     .queryParam("access_token", accessToken)
                     .toUriString();
 
@@ -121,44 +129,105 @@ public class ThreadsInsightsService {
     }
 
     /**
-     * Get user insights dashboard data
+     * Get comprehensive insights dashboard with all available metrics
      */
-    public UserInsightsDashboard getUserInsightsDashboard(String userId) {
-        List<ThreadsInsight> latestInsights = insightsRepository.findLatestUserInsights(userId);
+    public InsightsDashboard getInsightsDashboard(String userId) {
+        // Get latest user insights
+        List<ThreadsInsight> userInsights = insightsRepository.findLatestUserInsights(userId);
+        Map<String, Long> userMetrics = userInsights.stream()
+                .collect(Collectors.toMap(
+                        ThreadsInsight::getMetricName,
+                        ThreadsInsight::getMetricValue,
+                        (existing, replacement) -> replacement));
 
-        Map<String, Long> metrics = new HashMap<>();
-        for (ThreadsInsight insight : latestInsights) {
-            metrics.put(insight.getMetricName(), insight.getMetricValue());
+        // Get posts with insights for media metrics
+        List<ThreadsPost> posts = postsRepository.findByUserIdAndIsDeletedFalseOrderByTimestampDesc(userId);
+
+        // Calculate total media metrics across all posts
+        Map<String, Long> totalMediaMetrics = new HashMap<>();
+        totalMediaMetrics.put("total_views",
+                posts.stream().mapToLong(p -> p.getViewsCount() != null ? p.getViewsCount() : 0L).sum());
+        totalMediaMetrics.put("total_likes",
+                posts.stream().mapToLong(p -> p.getLikesCount() != null ? p.getLikesCount() : 0L).sum());
+        totalMediaMetrics.put("total_replies",
+                posts.stream().mapToLong(p -> p.getRepliesCount() != null ? p.getRepliesCount() : 0L).sum());
+        totalMediaMetrics.put("total_reposts",
+                posts.stream().mapToLong(p -> p.getRepostsCount() != null ? p.getRepostsCount() : 0L).sum());
+        totalMediaMetrics.put("total_quotes",
+                posts.stream().mapToLong(p -> p.getQuotesCount() != null ? p.getQuotesCount() : 0L).sum());
+
+        // Calculate average engagement per post
+        int postCount = posts.size();
+        Map<String, Double> averageMetrics = new HashMap<>();
+        if (postCount > 0) {
+            averageMetrics.put("avg_views", totalMediaMetrics.get("total_views").doubleValue() / postCount);
+            averageMetrics.put("avg_likes", totalMediaMetrics.get("total_likes").doubleValue() / postCount);
+            averageMetrics.put("avg_replies", totalMediaMetrics.get("total_replies").doubleValue() / postCount);
+            averageMetrics.put("avg_reposts", totalMediaMetrics.get("total_reposts").doubleValue() / postCount);
+            averageMetrics.put("avg_quotes", totalMediaMetrics.get("total_quotes").doubleValue() / postCount);
         }
 
-        // Get historical data for views (last 30 days)
+        // Get top performing posts (sorted by total engagement)
+        List<TopPost> topPosts = posts.stream()
+                .sorted((p1, p2) -> {
+                    // Calculate total engagement for each post
+                    long engagement1 = (p1.getViewsCount() != null ? p1.getViewsCount() : 0L) +
+                            (p1.getLikesCount() != null ? p1.getLikesCount() : 0L) +
+                            (p1.getRepliesCount() != null ? p1.getRepliesCount() : 0L) +
+                            (p1.getRepostsCount() != null ? p1.getRepostsCount() : 0L) +
+                            (p1.getQuotesCount() != null ? p1.getQuotesCount() : 0L);
+
+                    long engagement2 = (p2.getViewsCount() != null ? p2.getViewsCount() : 0L) +
+                            (p2.getLikesCount() != null ? p2.getLikesCount() : 0L) +
+                            (p2.getRepliesCount() != null ? p2.getRepliesCount() : 0L) +
+                            (p2.getRepostsCount() != null ? p2.getRepostsCount() : 0L) +
+                            (p2.getQuotesCount() != null ? p2.getQuotesCount() : 0L);
+
+                    // Sort by total engagement descending
+                    return Long.compare(engagement2, engagement1);
+                })
+                .limit(10) // Get top 10 instead of 5 for better selection
+                .map(post -> new TopPost(
+                        post.getId(),
+                        post.getText() != null ? post.getText() : "",
+                        post.getViewsCount() != null ? post.getViewsCount() : 0L,
+                        post.getLikesCount() != null ? post.getLikesCount() : 0L,
+                        post.getRepliesCount() != null ? post.getRepliesCount() : 0L,
+                        post.getTimestamp()))
+                .collect(Collectors.toList());
+
+        // Get engagement trends over time (last 30 days)
         LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
-        List<ThreadsInsight> viewsHistory = insightsRepository.findInsightsInDateRange(userId, thirtyDaysAgo,
+        List<ThreadsInsight> recentInsights = insightsRepository.findInsightsInDateRange(userId, thirtyDaysAgo,
                 LocalDateTime.now());
 
-        List<DailyMetric> dailyViews = new ArrayList<>();
-        Map<LocalDateTime, Long> viewsByDate = new HashMap<>();
-
-        for (ThreadsInsight insight : viewsHistory) {
-            if ("views".equals(insight.getMetricName())) {
-                LocalDateTime date = insight.getDateRecorded().toLocalDate().atStartOfDay();
-                viewsByDate.put(date, insight.getMetricValue());
-            }
+        Map<LocalDateTime, Map<String, Long>> dailyMetrics = new HashMap<>();
+        for (ThreadsInsight insight : recentInsights) {
+            LocalDateTime date = insight.getDateRecorded().toLocalDate().atStartOfDay();
+            dailyMetrics.computeIfAbsent(date, k -> new HashMap<>())
+                    .put(insight.getMetricName(), insight.getMetricValue());
         }
 
-        for (Map.Entry<LocalDateTime, Long> entry : viewsByDate.entrySet()) {
-            dailyViews.add(new DailyMetric(entry.getKey(), entry.getValue()));
-        }
+        List<EngagementTrend> trends = dailyMetrics.entrySet().stream()
+                .map(entry -> new EngagementTrend(
+                        entry.getKey(),
+                        entry.getValue().getOrDefault("views", 0L),
+                        entry.getValue().getOrDefault("likes", 0L),
+                        entry.getValue().getOrDefault("replies", 0L),
+                        entry.getValue().getOrDefault("reposts", 0L),
+                        entry.getValue().getOrDefault("quotes", 0L)))
+                .sorted((a, b) -> a.getDate().compareTo(b.getDate()))
+                .collect(Collectors.toList());
 
-        return new UserInsightsDashboard(metrics, dailyViews);
+        return new InsightsDashboard(userMetrics, totalMediaMetrics, averageMetrics, topPosts, trends, postCount);
     }
 
     /**
-     * Get post performance analytics
+     * Get post performance analytics for a specific time period
      */
     public PostPerformanceAnalytics getPostPerformanceAnalytics(String userId, LocalDateTime startDate,
             LocalDateTime endDate) {
-        List<ThreadsInsight> insights = insightsRepository.findInsightsInDateRange(userId, startDate, endDate);
+        List<ThreadsPost> posts = postsRepository.findPostsByUserInDateRange(userId, startDate, endDate);
 
         Map<String, List<Long>> metricsByType = new HashMap<>();
         metricsByType.put("views", new ArrayList<>());
@@ -167,13 +236,12 @@ public class ThreadsInsightsService {
         metricsByType.put("reposts", new ArrayList<>());
         metricsByType.put("quotes", new ArrayList<>());
 
-        for (ThreadsInsight insight : insights) {
-            if (insight.getInsightType() == ThreadsInsight.InsightType.MEDIA_INSIGHT) {
-                String metricName = insight.getMetricName();
-                if (metricsByType.containsKey(metricName)) {
-                    metricsByType.get(metricName).add(insight.getMetricValue());
-                }
-            }
+        for (ThreadsPost post : posts) {
+            metricsByType.get("views").add(post.getViewsCount() != null ? post.getViewsCount() : 0L);
+            metricsByType.get("likes").add(post.getLikesCount() != null ? post.getLikesCount() : 0L);
+            metricsByType.get("replies").add(post.getRepliesCount() != null ? post.getRepliesCount() : 0L);
+            metricsByType.get("reposts").add(post.getRepostsCount() != null ? post.getRepostsCount() : 0L);
+            metricsByType.get("quotes").add(post.getQuotesCount() != null ? post.getQuotesCount() : 0L);
         }
 
         Map<String, MetricSummary> summaries = new HashMap<>();
@@ -232,18 +300,11 @@ public class ThreadsInsightsService {
      */
     private LocalDateTime parseThreadsTimestamp(String timestamp) {
         try {
-            // Parse as OffsetDateTime first, then convert to LocalDateTime in UTC
             OffsetDateTime offsetDateTime = OffsetDateTime.parse(timestamp, THREADS_TIMESTAMP_FORMATTER);
             return offsetDateTime.toLocalDateTime();
         } catch (Exception e) {
-            logger.warn("Failed to parse timestamp '{}', trying alternative format", timestamp);
-            try {
-                // Fallback to ISO format
-                return LocalDateTime.parse(timestamp, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-            } catch (Exception e2) {
-                logger.error("Failed to parse timestamp '{}' with both formatters", timestamp);
-                return LocalDateTime.now(); // Fallback to current time
-            }
+            logger.warn("Failed to parse timestamp: {}, using current time", timestamp);
+            return LocalDateTime.now();
         }
     }
 
@@ -277,7 +338,7 @@ public class ThreadsInsightsService {
                 }
             }
 
-            // Handle demographic breakdowns
+            // Handle demographic breakdowns for followers_count
             if (insightNode.has("total_value") && insightNode.get("total_value").has("breakdowns")) {
                 JsonNode breakdowns = insightNode.get("total_value").get("breakdowns");
                 ThreadsInsight demographicInsight = new ThreadsInsight(userId, ThreadsInsight.InsightType.USER_INSIGHT,
@@ -321,24 +382,99 @@ public class ThreadsInsightsService {
         }
     }
 
+    // DTOs for enhanced insights dashboard
+
     /**
-     * User insights dashboard DTO
+     * Comprehensive insights dashboard DTO
      */
-    public static class UserInsightsDashboard {
-        private final Map<String, Long> currentMetrics;
-        private final List<DailyMetric> dailyViews;
+    public static class InsightsDashboard {
+        private final Map<String, Long> userMetrics;
+        private final Map<String, Long> totalMediaMetrics;
+        private final Map<String, Double> averageMetrics;
+        private final List<TopPost> topPosts;
+        private final List<EngagementTrend> engagementTrends;
+        private final int totalPosts;
 
-        public UserInsightsDashboard(Map<String, Long> currentMetrics, List<DailyMetric> dailyViews) {
-            this.currentMetrics = currentMetrics;
-            this.dailyViews = dailyViews;
+        public InsightsDashboard(Map<String, Long> userMetrics, Map<String, Long> totalMediaMetrics,
+                Map<String, Double> averageMetrics, List<TopPost> topPosts,
+                List<EngagementTrend> engagementTrends, int totalPosts) {
+            this.userMetrics = userMetrics;
+            this.totalMediaMetrics = totalMediaMetrics;
+            this.averageMetrics = averageMetrics;
+            this.topPosts = topPosts;
+            this.engagementTrends = engagementTrends;
+            this.totalPosts = totalPosts;
         }
 
-        public Map<String, Long> getCurrentMetrics() {
-            return currentMetrics;
+        // Getters
+        public Map<String, Long> getUserMetrics() {
+            return userMetrics;
         }
 
-        public List<DailyMetric> getDailyViews() {
-            return dailyViews;
+        public Map<String, Long> getTotalMediaMetrics() {
+            return totalMediaMetrics;
+        }
+
+        public Map<String, Double> getAverageMetrics() {
+            return averageMetrics;
+        }
+
+        public List<TopPost> getTopPosts() {
+            return topPosts;
+        }
+
+        public List<EngagementTrend> getEngagementTrends() {
+            return engagementTrends;
+        }
+
+        public int getTotalPosts() {
+            return totalPosts;
+        }
+    }
+
+    /**
+     * Top performing post DTO
+     */
+    public static class TopPost {
+        private final String id;
+        private final String text;
+        private final Long views;
+        private final Long likes;
+        private final Long replies;
+        private final LocalDateTime timestamp;
+
+        public TopPost(String id, String text, Long views, Long likes, Long replies, LocalDateTime timestamp) {
+            this.id = id;
+            this.text = text;
+            this.views = views;
+            this.likes = likes;
+            this.replies = replies;
+            this.timestamp = timestamp;
+        }
+
+        // Getters
+        public String getId() {
+            return id;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public Long getViews() {
+            return views;
+        }
+
+        public Long getLikes() {
+            return likes;
+        }
+
+        public Long getReplies() {
+            return replies;
+        }
+
+        public LocalDateTime getTimestamp() {
+            return timestamp;
         }
     }
 
@@ -431,17 +567,17 @@ public class ThreadsInsightsService {
     }
 
     /**
-     * Engagement trend DTO
+     * Engagement trend data DTO
      */
     public static class EngagementTrend {
         private final LocalDateTime date;
-        private final long views;
-        private final long likes;
-        private final long replies;
-        private final long reposts;
-        private final long quotes;
+        private final Long views;
+        private final Long likes;
+        private final Long replies;
+        private final Long reposts;
+        private final Long quotes;
 
-        public EngagementTrend(LocalDateTime date, long views, long likes, long replies, long reposts, long quotes) {
+        public EngagementTrend(LocalDateTime date, Long views, Long likes, Long replies, Long reposts, Long quotes) {
             this.date = date;
             this.views = views;
             this.likes = likes;
@@ -454,23 +590,23 @@ public class ThreadsInsightsService {
             return date;
         }
 
-        public long getViews() {
+        public Long getViews() {
             return views;
         }
 
-        public long getLikes() {
+        public Long getLikes() {
             return likes;
         }
 
-        public long getReplies() {
+        public Long getReplies() {
             return replies;
         }
 
-        public long getReposts() {
+        public Long getReposts() {
             return reposts;
         }
 
-        public long getQuotes() {
+        public Long getQuotes() {
             return quotes;
         }
     }

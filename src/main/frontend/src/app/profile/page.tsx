@@ -15,7 +15,8 @@ import {
     Eye,
     Heart,
     ExternalLink,
-    RefreshCw
+    RefreshCw,
+    Activity
 } from 'lucide-react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:10081"
@@ -35,10 +36,22 @@ interface PostStatistics {
 }
 
 interface UserInsights {
-    currentMetrics: {
+    userMetrics: {
         views?: number
         followers_count?: number
+        likes?: number
+        replies?: number
+        quotes?: number
+        clicks?: number
     }
+    totalMediaMetrics: {
+        total_views: number
+        total_likes: number
+        total_replies: number
+        total_reposts: number
+        total_quotes: number
+    }
+    totalPosts: number
 }
 
 export default function ProfilePage() {
@@ -257,7 +270,7 @@ export default function ProfilePage() {
                         </Card>
 
                         {/* Insights Summary */}
-                        {userInsights && (
+                        {userInsights && userInsights.userMetrics && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="flex items-center">
@@ -267,25 +280,36 @@ export default function ProfilePage() {
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <div className="space-y-3">
-                                        {userInsights.currentMetrics.views !== undefined && (
+                                        {userInsights.userMetrics.views !== undefined && (
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center">
                                                     <Eye className="h-4 w-4 mr-2 text-blue-500" />
                                                     <span className="text-sm">Profile Views</span>
                                                 </div>
                                                 <Badge variant="secondary">
-                                                    {formatNumber(userInsights.currentMetrics.views)}
+                                                    {formatNumber(userInsights.userMetrics.views)}
                                                 </Badge>
                                             </div>
                                         )}
-                                        {userInsights.currentMetrics.followers_count !== undefined && (
+                                        {userInsights.userMetrics.followers_count !== undefined && (
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center">
                                                     <Users className="h-4 w-4 mr-2 text-purple-500" />
                                                     <span className="text-sm">Followers</span>
                                                 </div>
                                                 <Badge variant="secondary">
-                                                    {formatNumber(userInsights.currentMetrics.followers_count)}
+                                                    {formatNumber(userInsights.userMetrics.followers_count)}
+                                                </Badge>
+                                            </div>
+                                        )}
+                                        {userInsights.userMetrics.clicks !== undefined && (
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center">
+                                                    <Activity className="h-4 w-4 mr-2 text-green-500" />
+                                                    <span className="text-sm">Profile Clicks</span>
+                                                </div>
+                                                <Badge variant="secondary">
+                                                    {formatNumber(userInsights.userMetrics.clicks)}
                                                 </Badge>
                                             </div>
                                         )}

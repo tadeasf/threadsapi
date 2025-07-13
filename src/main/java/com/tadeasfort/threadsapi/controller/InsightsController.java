@@ -41,12 +41,12 @@ public class InsightsController {
     }
 
     @GetMapping("/dashboard/{userId}")
-    @Operation(summary = "Get user insights dashboard", description = "Get comprehensive insights dashboard data")
-    public ResponseEntity<ThreadsInsightsService.UserInsightsDashboard> getUserInsightsDashboard(
+    @Operation(summary = "Get comprehensive insights dashboard", description = "Get comprehensive insights dashboard with all available metrics")
+    public ResponseEntity<ThreadsInsightsService.InsightsDashboard> getInsightsDashboard(
             @Parameter(description = "User ID") @PathVariable String userId,
             @Parameter(description = "Access token (optional)") @RequestParam(required = false) String accessToken) {
 
-        ThreadsInsightsService.UserInsightsDashboard dashboard = insightsService.getUserInsightsDashboard(userId);
+        ThreadsInsightsService.InsightsDashboard dashboard = insightsService.getInsightsDashboard(userId);
         return ResponseEntity.ok(dashboard);
     }
 
@@ -74,5 +74,21 @@ public class InsightsController {
 
         List<ThreadsInsightsService.EngagementTrend> trends = insightsService.getEngagementTrends(userId, days);
         return ResponseEntity.ok(trends);
+    }
+
+    @PostMapping("/refresh/{userId}")
+    @Operation(summary = "Refresh insights data", description = "Fetch fresh insights from Threads API and update stored data")
+    public ResponseEntity<String> refreshInsights(
+            @Parameter(description = "User ID") @PathVariable String userId,
+            @Parameter(description = "Access token") @RequestParam String accessToken) {
+
+        try {
+            // Refresh user insights
+            insightsService.fetchAndStoreUserInsights(userId, accessToken);
+
+            return ResponseEntity.ok("Insights refreshed successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to refresh insights: " + e.getMessage());
+        }
     }
 }
