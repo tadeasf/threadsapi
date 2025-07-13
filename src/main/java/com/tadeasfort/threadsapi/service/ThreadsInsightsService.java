@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -260,6 +261,134 @@ public class ThreadsInsightsService {
         }
 
         return new PostPerformanceAnalytics(summaries, startDate, endDate);
+    }
+
+    /**
+     * Get detailed insights for a specific post
+     */
+    public PostDetailedInsights getDetailedPostInsights(String postId, String userId, String accessToken) {
+        // Fetch fresh insights for the post
+        List<ThreadsInsight> postInsights = fetchAndStoreMediaInsights(postId, userId, accessToken);
+
+        // Get the post details
+        Optional<ThreadsPost> postOpt = postsRepository.findById(postId);
+        if (postOpt.isEmpty()) {
+            throw new RuntimeException("Post not found: " + postId);
+        }
+
+        ThreadsPost post = postOpt.get();
+
+        // Calculate current metrics from fresh insights
+        Map<String, Long> currentMetrics = new HashMap<>();
+        // Initialize with defaults
+        currentMetrics.put("views", 0L);
+        currentMetrics.put("likes", 0L);
+        currentMetrics.put("replies", 0L);
+        currentMetrics.put("reposts", 0L);
+        currentMetrics.put("quotes", 0L);
+
+        // Update with fresh insights data
+        for (ThreadsInsight insight : postInsights) {
+            if (insight.getDateRecorded().isAfter(LocalDateTime.now().minusHours(1))) { // Use recent insights
+                currentMetrics.put(insight.getMetricName(), insight.getMetricValue());
+            }
+        }
+
+        // Fallback to cached post data if no fresh insights available
+        if (postInsights.isEmpty()) {
+            currentMetrics.put("views", post.getViewsCount() != null ? post.getViewsCount() : 0L);
+            currentMetrics.put("likes", post.getLikesCount() != null ? post.getLikesCount() : 0L);
+            currentMetrics.put("replies", post.getRepliesCount() != null ? post.getRepliesCount() : 0L);
+            currentMetrics.put("reposts", post.getRepostsCount() != null ? post.getRepostsCount() : 0L);
+            currentMetrics.put("quotes", post.getQuotesCount() != null ? post.getQuotesCount() : 0L);
+        }
+
+        // Calculate total engagement
+        long totalEngagement = currentMetrics.values().stream().mapToLong(Long::longValue).sum();
+
+        // Get user's average metrics for comparison
+        List<ThreadsPost> userPosts = postsRepository.findByUserIdAndIsDeletedFalseOrderByTimestampDesc(userId);
+        Map<String, Double> userAverages = new HashMap<>();
+
+        if (!userPosts.isEmpty()) {
+            userAverages.put("avg_views", userPosts.stream()
+                    .mapToLong(p -> p.getViewsCount() != null ? p.getViewsCount() : 0L).average().orElse(0.0));
+            userAverages.put("avg_likes", userPosts.stream()
+                    .mapToLong(p -> p.getLikesCount() != null ? p.getLikesCount() : 0L).average().orElse(0.0));
+            userAverages.put("avg_replies", userPosts.stream()
+                    .mapToLong(p -> p.getRepliesCount() != null ? p.getRepliesCount() : 0L).average().orElse(0.0));
+            userAverages.put("avg_reposts", userPosts.stream()
+                    .mapToLong(p -> p.getRepostsCount() != null ? p.getRepostsCount() : 0L).average().orElse(0.0));
+            userAverages.put("avg_quotes", userPosts.stream()
+                    .mapToLong(p -> p.getQuotesCount() != null ? p.getQuotesCount() : 0L).average().orElse(0.0));
+        }
+
+        // Calculate performance vs average
+        Map<String, Double> performanceVsAverage = new HashMap<>();
+        performanceVsAverage.put("views_vs_avg",
+                userAverages.get("avg_views") > 0 ? currentMetrics.get("views") / userAverages.get("avg_views") : 1.0);
+        performanceVsAverage.put("likes_vs_avg",
+                userAverages.get("avg_likes") > 0 ? currentMetrics.get("likes") / userAverages.get("avg_likes") : 1.0);
+        performanceVsAverage.put("replies_vs_avg",
+                userAverages.get("avg_replies") > 0 ? currentMetrics.get("replies") / userAverages.get("avg_replies")
+                        : 1.0);
+        performanceVsAverage.put("reposts_vs_avg",
+                userAverages.get("avg_reposts") > 0 ? currentMetrics.get("reposts") / userAverages.get("avg_reposts")
+                        : 1.0);
+        performanceVsAverage.put("quotes_vs_avg",
+                userAverages.get("avg_quotes") > 0 ? currentMetrics.get("quotes") / userAverages.get("avg_quotes")
+                        : 1.0);
+
+        // Calculate engagement rate (likes + replies + reposts + quotes) / views
+        double engagementRate = currentMetrics.get("views") > 0
+                ? (currentMetrics.get("likes") + currentMetrics.get("replies") + currentMetrics.get("reposts")
+                        + currentMetrics.get("quotes")) * 100.0 / currentMetrics.get("views")
+                : 0.0;
+
+        // Get post rank among user's posts
+        List<ThreadsPost> sortedPosts = userPosts.stream()
+                .sorted((p1, p2) -> {
+                    long engagement1 = (p1.getViewsCount() != null ? p1.getViewsCount() : 0L) +
+                            (p1.getLikesCount() != null ? p1.getLikesCount() : 0L) +
+                            (p1.getRepliesCount() != null ? p1.getRepliesCount() : 0L) +
+                            (p1.getRepostsCount() != null ? p1.getRepostsCount() : 0L) +
+                            (p1.getQuotesCount() != null ? p1.getQuotesCount() : 0L);
+
+                    long engagement2 = (p2.getViewsCount() != null ? p2.getViewsCount() : 0L) +
+                            (p2.getLikesCount() != null ? p2.getLikesCount() : 0L) +
+                            (p2.getRepliesCount() != null ? p2.getRepliesCount() : 0L) +
+                            (p2.getRepostsCount() != null ? p2.getRepostsCount() : 0L) +
+                            (p2.getQuotesCount() != null ? p2.getQuotesCount() : 0L);
+
+                    return Long.compare(engagement2, engagement1);
+                })
+                .collect(Collectors.toList());
+
+        int postRank = sortedPosts.indexOf(post) + 1;
+
+        // Get historical insights for trends
+        List<ThreadsInsight> historicalInsights = insightsRepository.findByPostIdOrderByDateRecordedDesc(postId);
+
+        return new PostDetailedInsights(
+                postId,
+                post.getText(),
+                post.getTimestamp(),
+                currentMetrics,
+                userAverages,
+                performanceVsAverage,
+                totalEngagement,
+                engagementRate,
+                postRank,
+                userPosts.size(),
+                historicalInsights.stream()
+                        .map(insight -> new EngagementTrend(
+                                insight.getDateRecorded(),
+                                insight.getMetricName().equals("views") ? insight.getMetricValue() : 0L,
+                                insight.getMetricName().equals("likes") ? insight.getMetricValue() : 0L,
+                                insight.getMetricName().equals("replies") ? insight.getMetricValue() : 0L,
+                                insight.getMetricName().equals("reposts") ? insight.getMetricValue() : 0L,
+                                insight.getMetricName().equals("quotes") ? insight.getMetricValue() : 0L))
+                        .collect(Collectors.toList()));
     }
 
     /**
@@ -608,6 +737,85 @@ public class ThreadsInsightsService {
 
         public Long getQuotes() {
             return quotes;
+        }
+    }
+
+    /**
+     * Detailed insights for a specific post DTO
+     */
+    public static class PostDetailedInsights {
+        private final String postId;
+        private final String text;
+        private final LocalDateTime timestamp;
+        private final Map<String, Long> currentMetrics;
+        private final Map<String, Double> userAverages;
+        private final Map<String, Double> performanceVsAverage;
+        private final long totalEngagement;
+        private final double engagementRate;
+        private final int postRank;
+        private final int totalUserPosts;
+        private final List<EngagementTrend> historicalInsights;
+
+        public PostDetailedInsights(String postId, String text, LocalDateTime timestamp,
+                Map<String, Long> currentMetrics, Map<String, Double> userAverages,
+                Map<String, Double> performanceVsAverage, long totalEngagement, double engagementRate,
+                int postRank, int totalUserPosts, List<EngagementTrend> historicalInsights) {
+            this.postId = postId;
+            this.text = text;
+            this.timestamp = timestamp;
+            this.currentMetrics = currentMetrics;
+            this.userAverages = userAverages;
+            this.performanceVsAverage = performanceVsAverage;
+            this.totalEngagement = totalEngagement;
+            this.engagementRate = engagementRate;
+            this.postRank = postRank;
+            this.totalUserPosts = totalUserPosts;
+            this.historicalInsights = historicalInsights;
+        }
+
+        // Getters
+        public String getPostId() {
+            return postId;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public LocalDateTime getTimestamp() {
+            return timestamp;
+        }
+
+        public Map<String, Long> getCurrentMetrics() {
+            return currentMetrics;
+        }
+
+        public Map<String, Double> getUserAverages() {
+            return userAverages;
+        }
+
+        public Map<String, Double> getPerformanceVsAverage() {
+            return performanceVsAverage;
+        }
+
+        public long getTotalEngagement() {
+            return totalEngagement;
+        }
+
+        public double getEngagementRate() {
+            return engagementRate;
+        }
+
+        public int getPostRank() {
+            return postRank;
+        }
+
+        public int getTotalUserPosts() {
+            return totalUserPosts;
+        }
+
+        public List<EngagementTrend> getHistoricalInsights() {
+            return historicalInsights;
         }
     }
 }

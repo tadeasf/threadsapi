@@ -39,7 +39,8 @@ import {
     ChevronDown,
     ChevronUp,
     ExternalLink,
-    RefreshCw
+    RefreshCw,
+    ArrowLeft
 } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:10081";
@@ -49,7 +50,7 @@ interface KeywordSubscription {
     keyword: string;
     searchFrequencyHours: number;
     minEngagementThreshold: number;
-    searchType: 'TEXT' | 'HASHTAG' | 'MENTION';
+    searchType: 'TOP' | 'RECENT';
     active: boolean;
     createdAt: string;
     lastSearchAt?: string;
@@ -57,16 +58,16 @@ interface KeywordSubscription {
 
 interface DiscoveredPost {
     id: number;
-    threadId: string;
+    postId: string;
     text: string;
     username: string;
     permalink: string;
-    timestamp: string;
-    likeCount: number;
-    replyCount: number;
-    repostCount: number;
-    quoteCount: number;
-    viewCount?: number;
+    postTimestamp: string;
+    likesCount: number;
+    repliesCount: number;
+    repostsCount: number;
+    quotesCount: number;
+    viewsCount?: number;
     engagementScore: number;
     keyword: string;
     discoveredAt: string;
@@ -76,7 +77,7 @@ interface NewSubscription {
     keyword: string;
     searchFrequencyHours: number;
     minEngagementThreshold: number;
-    searchType: 'TEXT' | 'HASHTAG' | 'MENTION';
+    searchType: 'TOP' | 'RECENT';
 }
 
 export default function DiscoveryPage() {
@@ -90,7 +91,7 @@ export default function DiscoveryPage() {
         keyword: '',
         searchFrequencyHours: 24,
         minEngagementThreshold: 10,
-        searchType: 'TEXT'
+        searchType: 'TOP'
     });
     const router = useRouter();
 
@@ -104,7 +105,7 @@ export default function DiscoveryPage() {
                 return;
             }
 
-            const response = await fetch(`${API_BASE_URL}/api/automation/subscriptions?userId=${userId}&accessToken=${token}`);
+            const response = await fetch(`${API_BASE_URL}/api/automation/subscriptions/${userId}?accessToken=${token}`);
             if (response.ok) {
                 const data = await response.json();
                 setSubscriptions(data);
@@ -161,7 +162,12 @@ export default function DiscoveryPage() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(newSubscription)
+                body: JSON.stringify({
+                    keyword: newSubscription.keyword,
+                    searchType: newSubscription.searchType,
+                    engagementThreshold: newSubscription.minEngagementThreshold,
+                    searchFrequencyHours: newSubscription.searchFrequencyHours
+                })
             });
 
             if (response.ok) {
@@ -171,7 +177,7 @@ export default function DiscoveryPage() {
                     keyword: '',
                     searchFrequencyHours: 24,
                     minEngagementThreshold: 10,
-                    searchType: 'TEXT'
+                    searchType: 'TOP'
                 });
                 setShowAddDialog(false);
                 // Fetch posts for the new keyword
@@ -231,12 +237,17 @@ export default function DiscoveryPage() {
             if (!token || !userId) return;
 
             setIsRefreshing(true);
-            await fetch(`${API_BASE_URL}/api/automation/search?userId=${userId}&accessToken=${token}`, {
+            await fetch(`${API_BASE_URL}/api/automation/search`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ keyword })
+                body: JSON.stringify({
+                    keyword,
+                    userId,
+                    accessToken: token,
+                    searchType: 'TOP'
+                })
             });
             // Refresh discovered posts after manual search
             setTimeout(() => fetchDiscoveredPosts(keyword), 2000);
@@ -248,7 +259,11 @@ export default function DiscoveryPage() {
     };
 
     const formatEngagement = (post: DiscoveredPost) => {
-        return post.likeCount + post.replyCount + post.repostCount + post.quoteCount;
+        const likeCount = post.likesCount || 0;
+        const replyCount = post.repliesCount || 0;
+        const repostCount = post.repostsCount || 0;
+        const quoteCount = post.quotesCount || 0;
+        return likeCount + replyCount + repostCount + quoteCount;
     };
 
     const formatDate = (dateString: string) => {
@@ -262,9 +277,9 @@ export default function DiscoveryPage() {
 
     const getSearchTypeIcon = (type: string) => {
         switch (type) {
-            case 'HASHTAG': return '#';
-            case 'MENTION': return '@';
-            default: return 'T';
+            case 'TOP': return '🔥';
+            case 'RECENT': return '⏰';
+            default: return '🔥';
         }
     };
 
@@ -296,11 +311,21 @@ export default function DiscoveryPage() {
             <div className="container mx-auto px-4 py-8">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-8">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Content Discovery</h1>
-                        <p className="text-gray-600 mt-2">
-                            Monitor keywords and discover trending content automatically
-                        </p>
+                    <div className="flex items-center space-x-4">
+                        <Button onClick={() => router.back()} variant="outline">
+                            <ArrowLeft className="h-4 w-4 mr-2" />
+                            Back
+                        </Button>
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-900">Keyword Discovery</h1>
+                            <p className="text-gray-600 mt-2">Discover and track posts by keywords across Threads</p>
+                            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <p className="text-sm text-blue-800">
+                                    <strong>Note:</strong> Engagement metrics (likes, views, etc.) are only available for your own posts due to privacy restrictions.
+                                    Discovered posts from other users will show content and metadata but not engagement numbers.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                     <div className="flex items-center gap-4">
                         <Button onClick={refreshAllData} disabled={isRefreshing} variant="outline">
@@ -340,7 +365,7 @@ export default function DiscoveryPage() {
                                         </Label>
                                         <Select
                                             value={newSubscription.searchType}
-                                            onValueChange={(value: 'TEXT' | 'HASHTAG' | 'MENTION') =>
+                                            onValueChange={(value: 'TOP' | 'RECENT') =>
                                                 setNewSubscription(prev => ({ ...prev, searchType: value }))
                                             }
                                         >
@@ -348,9 +373,8 @@ export default function DiscoveryPage() {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="TEXT">Text</SelectItem>
-                                                <SelectItem value="HASHTAG">Hashtag</SelectItem>
-                                                <SelectItem value="MENTION">Mention</SelectItem>
+                                                <SelectItem value="TOP">Top Posts</SelectItem>
+                                                <SelectItem value="RECENT">Recent Posts</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -496,7 +520,7 @@ export default function DiscoveryPage() {
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="font-medium">@{post.username}</span>
                                                                         <span className="text-sm text-gray-500">
-                                                                            {formatDate(post.timestamp)}
+                                                                            {formatDate(post.postTimestamp)}
                                                                         </span>
                                                                     </div>
                                                                     <div className="flex items-center gap-2">
@@ -522,27 +546,27 @@ export default function DiscoveryPage() {
                                                                     {post.text}
                                                                 </p>
                                                                 <div className="flex items-center gap-6 text-sm text-gray-600">
-                                                                    {post.viewCount && (
+                                                                    {post.viewsCount && (
                                                                         <span className="flex items-center gap-1">
                                                                             <Eye className="w-4 h-4" />
-                                                                            {post.viewCount.toLocaleString()}
+                                                                            {post.viewsCount.toLocaleString()}
                                                                         </span>
                                                                     )}
                                                                     <span className="flex items-center gap-1">
                                                                         <Heart className="w-4 h-4" />
-                                                                        {post.likeCount.toLocaleString()}
+                                                                        {(post.likesCount || 0).toLocaleString()}
                                                                     </span>
                                                                     <span className="flex items-center gap-1">
                                                                         <MessageCircle className="w-4 h-4" />
-                                                                        {post.replyCount.toLocaleString()}
+                                                                        {(post.repliesCount || 0).toLocaleString()}
                                                                     </span>
                                                                     <span className="flex items-center gap-1">
                                                                         <Repeat className="w-4 h-4" />
-                                                                        {post.repostCount.toLocaleString()}
+                                                                        {(post.repostsCount || 0).toLocaleString()}
                                                                     </span>
                                                                     <span className="flex items-center gap-1">
                                                                         <Quote className="w-4 h-4" />
-                                                                        {post.quoteCount.toLocaleString()}
+                                                                        {(post.quotesCount || 0).toLocaleString()}
                                                                     </span>
                                                                     <span className="text-xs font-medium">
                                                                         Total: {formatEngagement(post).toLocaleString()}

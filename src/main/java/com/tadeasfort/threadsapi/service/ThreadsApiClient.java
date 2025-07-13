@@ -91,6 +91,27 @@ public class ThreadsApiClient {
         if (postRequest.getIsCarouselItem() != null) {
             params.add("is_carousel_item", postRequest.getIsCarouselItem().toString());
         }
+        if (postRequest.getChildren() != null && !postRequest.getChildren().isEmpty()) {
+            params.add("children", String.join(",", postRequest.getChildren()));
+        }
+        if (postRequest.getReplyToId() != null) {
+            params.add("reply_to_id", postRequest.getReplyToId());
+        }
+        if (postRequest.getQuotePostId() != null) {
+            params.add("quote_post_id", postRequest.getQuotePostId());
+        }
+        if (postRequest.getLocationName() != null) {
+            params.add("location_name", postRequest.getLocationName());
+        }
+        if (postRequest.getAltText() != null) {
+            params.add("alt_text", postRequest.getAltText());
+        }
+        if (postRequest.getAllowCommenting() != null) {
+            params.add("allow_commenting", postRequest.getAllowCommenting().toString());
+        }
+        if (postRequest.getHideLikeViewCounts() != null) {
+            params.add("hide_like_view_counts", postRequest.getHideLikeViewCounts().toString());
+        }
 
         HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
 

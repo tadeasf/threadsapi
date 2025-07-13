@@ -3,6 +3,7 @@ package com.tadeasfort.threadsapi.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tadeasfort.threadsapi.entity.DiscoveredPost;
+import com.tadeasfort.threadsapi.entity.InteractionQueue;
 import com.tadeasfort.threadsapi.entity.KeywordSubscription;
 import com.tadeasfort.threadsapi.entity.ThreadsPost;
 import com.tadeasfort.threadsapi.repository.DiscoveredPostRepository;
@@ -51,8 +52,32 @@ public class ThreadsKeywordSearchService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private InteractionQueueService queueService;
+
     /**
      * Search for posts using a specific keyword
+     * 
+     * IMPORTANT: The Threads API keyword search endpoint searches PUBLIC posts
+     * across all users,
+     * not just the authenticated user's posts. However, engagement metrics (likes,
+     * views, etc.)
+     * are only available for posts owned by the authenticated user due to privacy
+     * restrictions.
+     * 
+     * This means:
+     * 1. Public discovery works correctly - finds posts from any user matching the
+     * keyword
+     * 2. Engagement metrics will only be available for the authenticated user's own
+     * posts
+     * 3. Other users' posts will have engagement metrics set to 0 for privacy
+     * reasons
+     * 
+     * This is the expected behavior according to Meta's Threads API documentation
+     * and
+     * privacy policies. For true content discovery, focus on the post content and
+     * metadata
+     * rather than engagement metrics for posts from other users.
      */
     public List<DiscoveredPost> searchKeyword(String userId, String keyword, String accessToken,
             KeywordSubscription.SearchType searchType) {
@@ -66,7 +91,7 @@ public class ThreadsKeywordSearchService {
         try {
             String url = UriComponentsBuilder.fromUriString(THREADS_API_BASE_URL + "/keyword_search")
                     .queryParam("q", keyword)
-                    .queryParam("search_type", searchType.name())
+                    .queryParam("search_type", mapSearchTypeToApiValue(searchType))
                     .queryParam("fields",
                             "id,text,media_type,permalink,timestamp,username,has_replies,is_quote_post,is_reply")
                     .queryParam("access_token", accessToken)
@@ -93,6 +118,20 @@ public class ThreadsKeywordSearchService {
                             if (!discoveredPostRepository.existsByPostIdAndUserIdAndKeyword(
                                     discoveredPost.getPostId(), userId, keyword)) {
 
+                                // Try to fetch engagement metrics for public posts
+                                try {
+                                    fetchEngagementMetrics(discoveredPost, accessToken);
+                                } catch (Exception e) {
+                                    logger.debug("Could not fetch engagement metrics for post {}: {}",
+                                            discoveredPost.getPostId(), e.getMessage());
+                                    // Set default values if metrics can't be fetched
+                                    discoveredPost.setLikesCount(0L);
+                                    discoveredPost.setRepliesCount(0L);
+                                    discoveredPost.setRepostsCount(0L);
+                                    discoveredPost.setQuotesCount(0L);
+                                    discoveredPost.setViewsCount(0L);
+                                }
+
                                 // Calculate engagement score
                                 discoveredPost.calculateEngagementScore();
 
@@ -102,6 +141,20 @@ public class ThreadsKeywordSearchService {
 
                                 logger.debug("Discovered new post: {} (score: {})",
                                         discoveredPost.getPostId(), discoveredPost.getEngagementScore());
+
+                                // Auto-queue high engagement posts
+                                if (discoveredPost.getEngagementScore() > 100.0) {
+                                    try {
+                                        InteractionQueue.InteractionType interactionType = determineInteractionType(
+                                                discoveredPost.getEngagementScore());
+                                        queueService.queueDiscoveredPost(discoveredPost, interactionType);
+                                        logger.debug("Auto-queued post {} for {} interaction",
+                                                discoveredPost.getPostId(), interactionType);
+                                    } catch (Exception e) {
+                                        logger.warn("Failed to auto-queue post {}: {}",
+                                                discoveredPost.getPostId(), e.getMessage());
+                                    }
+                                }
                             }
                         }
                     }
@@ -313,5 +366,92 @@ public class ThreadsKeywordSearchService {
             logger.warn("Failed to parse timestamp '{}', using current time", timestamp);
             return LocalDateTime.now();
         }
+    }
+
+    private String mapSearchTypeToApiValue(KeywordSubscription.SearchType searchType) {
+        return switch (searchType) {
+            case TOP -> "TOP";
+            case RECENT -> "RECENT";
+        };
+    }
+
+    private InteractionQueue.InteractionType determineInteractionType(Double engagementScore) {
+        if (engagementScore > 500) {
+            return InteractionQueue.InteractionType.REPLY; // High engagement deserves a reply
+        } else if (engagementScore > 200) {
+            return InteractionQueue.InteractionType.QUOTE; // Medium engagement gets a quote
+        } else {
+            return InteractionQueue.InteractionType.LIKE; // Low engagement gets a like
+        }
+    }
+
+    /**
+     * Fetch engagement metrics for a discovered post
+     */
+    private void fetchEngagementMetrics(DiscoveredPost discoveredPost, String accessToken) {
+        try {
+            String url = UriComponentsBuilder
+                    .fromUriString(THREADS_API_BASE_URL + "/" + discoveredPost.getPostId() + "/insights")
+                    .queryParam("metric", "views,likes,replies,reposts,quotes")
+                    .queryParam("access_token", accessToken)
+                    .toUriString();
+
+            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+                JsonNode dataArray = jsonResponse.get("data");
+
+                if (dataArray != null && dataArray.isArray()) {
+                    for (JsonNode metricNode : dataArray) {
+                        String metricName = metricNode.get("name").asText();
+                        JsonNode valuesArray = metricNode.get("values");
+
+                        if (valuesArray != null && valuesArray.isArray() && valuesArray.size() > 0) {
+                            long value = valuesArray.get(0).get("value").asLong();
+
+                            switch (metricName.toLowerCase()) {
+                                case "views":
+                                    discoveredPost.setViewsCount(value);
+                                    break;
+                                case "likes":
+                                    discoveredPost.setLikesCount(value);
+                                    break;
+                                case "replies":
+                                    discoveredPost.setRepliesCount(value);
+                                    break;
+                                case "reposts":
+                                    discoveredPost.setRepostsCount(value);
+                                    break;
+                                case "quotes":
+                                    discoveredPost.setQuotesCount(value);
+                                    break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                logger.debug("Could not fetch insights for post {}: HTTP {}",
+                        discoveredPost.getPostId(), response.getStatusCode());
+                // Set default values
+                setDefaultEngagementMetrics(discoveredPost);
+            }
+        } catch (Exception e) {
+            logger.debug("Error fetching engagement metrics for post {}: {}",
+                    discoveredPost.getPostId(), e.getMessage());
+            // Set default values
+            setDefaultEngagementMetrics(discoveredPost);
+        }
+    }
+
+    /**
+     * Set default engagement metrics when they can't be fetched
+     */
+    private void setDefaultEngagementMetrics(DiscoveredPost discoveredPost) {
+        discoveredPost.setLikesCount(0L);
+        discoveredPost.setRepliesCount(0L);
+        discoveredPost.setRepostsCount(0L);
+        discoveredPost.setQuotesCount(0L);
+        discoveredPost.setViewsCount(0L);
     }
 }

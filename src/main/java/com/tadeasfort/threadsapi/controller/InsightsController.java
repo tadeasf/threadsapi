@@ -65,6 +65,18 @@ public class InsightsController {
         return ResponseEntity.ok(analytics);
     }
 
+    @GetMapping("/post/{postId}/detailed")
+    @Operation(summary = "Get detailed post insights", description = "Get comprehensive insights for a specific post including engagement metrics, trends, and comparisons")
+    public ResponseEntity<ThreadsInsightsService.PostDetailedInsights> getDetailedPostInsights(
+            @Parameter(description = "Post ID") @PathVariable String postId,
+            @Parameter(description = "User ID") @RequestParam String userId,
+            @Parameter(description = "Access token") @RequestParam String accessToken) {
+
+        ThreadsInsightsService.PostDetailedInsights insights = insightsService.getDetailedPostInsights(postId, userId,
+                accessToken);
+        return ResponseEntity.ok(insights);
+    }
+
     @GetMapping("/trends/{userId}")
     @Operation(summary = "Get engagement trends", description = "Get engagement trends over time")
     public ResponseEntity<List<ThreadsInsightsService.EngagementTrend>> getEngagementTrends(
