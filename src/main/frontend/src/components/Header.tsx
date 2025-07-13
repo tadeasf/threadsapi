@@ -268,7 +268,7 @@ export default function Header() {
                                                     <div className="flex items-start justify-between">
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-sm font-medium text-gray-900 truncate">
-                                                                {post.text.length > 50 ? `${post.text.substring(0, 50)}...` : post.text}
+                                                                {post.text && post.text.length > 50 ? `${post.text.substring(0, 50)}...` : (post.text || 'No text content')}
                                                             </p>
                                                             <p className="text-xs text-gray-500 mt-1">
                                                                 {formatDate(post.timestamp)}
