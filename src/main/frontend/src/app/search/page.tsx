@@ -22,7 +22,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
 import {
     Search,
     Clock,
@@ -291,7 +291,7 @@ export default function SearchPage() {
                                 </CardTitle>
                                 {searchQuery && (
                                     <CardDescription>
-                                        Results for "{searchQuery}" ({searchType.toLowerCase()})
+                                        Results for &quot;{searchQuery}&quot; ({searchType.toLowerCase()})
                                     </CardDescription>
                                 )}
                             </CardHeader>

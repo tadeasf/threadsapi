@@ -29,7 +29,7 @@ export default function Home() {
             Threads API Wrapper
           </h1>
           <p className="text-xl md:text-2xl text-gray-600 max-w-2xl mx-auto">
-            A comprehensive Spring Boot wrapper for Meta's Threads API with a modern React frontend
+            A comprehensive Spring Boot wrapper for Meta&apos;s Threads API with a modern React frontend
           </p>
         </div>
 

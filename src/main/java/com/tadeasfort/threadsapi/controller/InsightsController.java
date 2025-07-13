@@ -43,7 +43,8 @@ public class InsightsController {
     @GetMapping("/dashboard/{userId}")
     @Operation(summary = "Get user insights dashboard", description = "Get comprehensive insights dashboard data")
     public ResponseEntity<ThreadsInsightsService.UserInsightsDashboard> getUserInsightsDashboard(
-            @Parameter(description = "User ID") @PathVariable String userId) {
+            @Parameter(description = "User ID") @PathVariable String userId,
+            @Parameter(description = "Access token (optional)") @RequestParam(required = false) String accessToken) {
 
         ThreadsInsightsService.UserInsightsDashboard dashboard = insightsService.getUserInsightsDashboard(userId);
         return ResponseEntity.ok(dashboard);
@@ -53,7 +54,8 @@ public class InsightsController {
     @Operation(summary = "Get post performance analytics", description = "Get detailed post performance analytics")
     public ResponseEntity<ThreadsInsightsService.PostPerformanceAnalytics> getPostPerformanceAnalytics(
             @Parameter(description = "User ID") @PathVariable String userId,
-            @Parameter(description = "Days back") @RequestParam(defaultValue = "30") int days) {
+            @Parameter(description = "Days back") @RequestParam(defaultValue = "30") int days,
+            @Parameter(description = "Access token (optional)") @RequestParam(required = false) String accessToken) {
 
         java.time.LocalDateTime endDate = java.time.LocalDateTime.now();
         java.time.LocalDateTime startDate = endDate.minusDays(days);
@@ -67,7 +69,8 @@ public class InsightsController {
     @Operation(summary = "Get engagement trends", description = "Get engagement trends over time")
     public ResponseEntity<List<ThreadsInsightsService.EngagementTrend>> getEngagementTrends(
             @Parameter(description = "User ID") @PathVariable String userId,
-            @Parameter(description = "Days back") @RequestParam(defaultValue = "30") int days) {
+            @Parameter(description = "Days back") @RequestParam(defaultValue = "30") int days,
+            @Parameter(description = "Access token (optional)") @RequestParam(required = false) String accessToken) {
 
         List<ThreadsInsightsService.EngagementTrend> trends = insightsService.getEngagementTrends(userId, days);
         return ResponseEntity.ok(trends);

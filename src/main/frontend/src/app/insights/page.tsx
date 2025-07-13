@@ -20,15 +20,13 @@ import {
     ChartLegend,
     ChartLegendContent,
 } from "@/components/ui/chart"
-import { Bar, BarChart, Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
+import { Bar, BarChart, Line, LineChart, XAxis, YAxis, CartesianGrid } from 'recharts'
 import {
     TrendingUp,
-    TrendingDown,
     Eye,
     Heart,
     MessageCircle,
     Repeat,
-    Calendar,
     RefreshCw,
     BarChart3,
     Activity
@@ -39,8 +37,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:1
 interface UserInsightsDashboard {
     currentMetrics: {
         views?: number
-        followers?: number
-        follower_demographics?: number
+        followers_count?: number
     }
     dailyViews: Array<{
         date: string
@@ -185,10 +182,7 @@ export default function InsightsPage() {
         })
     }
 
-    const calculatePercentageChange = (current: number, previous: number) => {
-        if (previous === 0) return 0
-        return ((current - previous) / previous) * 100
-    }
+
 
     if (isLoading) {
         return (
@@ -262,7 +256,7 @@ export default function InsightsPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold">
-                                    {formatNumber(dashboard.currentMetrics.followers || 0)}
+                                    {formatNumber(dashboard.currentMetrics.followers_count || 0)}
                                 </div>
                                 <p className="text-xs text-muted-foreground">
                                     Total followers

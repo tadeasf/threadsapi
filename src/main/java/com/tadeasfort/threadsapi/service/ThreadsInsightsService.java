@@ -48,7 +48,7 @@ public class ThreadsInsightsService {
     public List<ThreadsInsight> fetchAndStoreUserInsights(String userId, String accessToken) {
         try {
             String url = UriComponentsBuilder.fromUriString(THREADS_API_BASE_URL + "/me/threads_insights")
-                    .queryParam("metric", "views,followers_count,follower_demographics")
+                    .queryParam("metric", "views,followers_count")
                     .queryParam("access_token", accessToken)
                     .toUriString();
 

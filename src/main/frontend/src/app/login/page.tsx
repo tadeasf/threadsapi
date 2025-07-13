@@ -8,7 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:10081"
 
 export default function LoginPage() {
-    const [isLoading, setIsLoading] = useState(false)
+    const [isLoading] = useState(false)
     const [authUrl, setAuthUrl] = useState<string | null>(null)
     const [redirectUri, setRedirectUri] = useState<string | null>(null)
     const router = useRouter()
@@ -84,7 +84,7 @@ export default function LoginPage() {
                 <CardContent className="space-y-4">
                     <div className="text-center space-y-4">
                         <p className="text-sm text-gray-600">
-                            You'll be redirected to Meta to authorize this application
+                            You&apos;ll be redirected to Meta to authorize this application
                         </p>
 
                         <Button

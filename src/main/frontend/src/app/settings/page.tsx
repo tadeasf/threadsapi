@@ -28,14 +28,14 @@ import {
 } from "@/components/ui/dialog"
 import {
     Settings,
-    Bell,
+
     Shield,
     Database,
     Trash2,
     Download,
     RefreshCw,
     AlertTriangle,
-    Key,
+
     Eye,
     Clock,
     LogOut,
@@ -124,7 +124,7 @@ export default function SettingsPage() {
         }
     }
 
-    const handleSettingChange = (key: keyof AppSettings, value: any) => {
+    const handleSettingChange = (key: keyof AppSettings, value: boolean | number | string) => {
         setSettings(prev => ({ ...prev, [key]: value }))
     }
 

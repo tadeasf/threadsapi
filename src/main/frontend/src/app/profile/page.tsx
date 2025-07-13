@@ -4,21 +4,16 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Separator } from "@/components/ui/separator"
+
 import {
     User,
-    Calendar,
-    Link as LinkIcon,
-    MapPin,
     Users,
     FileText,
     Eye,
     Heart,
-    MessageCircle,
-    Repeat,
     ExternalLink,
     RefreshCw
 } from 'lucide-react'
@@ -42,8 +37,7 @@ interface PostStatistics {
 interface UserInsights {
     currentMetrics: {
         views?: number
-        followers?: number
-        follower_demographics?: number
+        followers_count?: number
     }
 }
 
@@ -283,14 +277,14 @@ export default function ProfilePage() {
                                                 </Badge>
                                             </div>
                                         )}
-                                        {userInsights.currentMetrics.followers !== undefined && (
+                                        {userInsights.currentMetrics.followers_count !== undefined && (
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center">
                                                     <Users className="h-4 w-4 mr-2 text-purple-500" />
                                                     <span className="text-sm">Followers</span>
                                                 </div>
                                                 <Badge variant="secondary">
-                                                    {formatNumber(userInsights.currentMetrics.followers)}
+                                                    {formatNumber(userInsights.currentMetrics.followers_count)}
                                                 </Badge>
                                             </div>
                                         )}

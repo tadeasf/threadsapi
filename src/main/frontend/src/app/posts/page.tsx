@@ -23,7 +23,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
 import {
     MoreHorizontal,
     Eye,
@@ -31,7 +31,7 @@ import {
     TrendingUp,
     Search,
     Filter,
-    Download,
+
     RefreshCw,
     Plus
 } from 'lucide-react'
@@ -119,7 +119,7 @@ export default function PostsPage() {
     }
 
     const filterAndSortPosts = () => {
-        let filtered = posts.filter(post => {
+        const filtered = posts.filter(post => {
             const postText = post.text || '' // Handle null/undefined text
             const matchesSearch = postText.toLowerCase().includes(searchTerm.toLowerCase())
             const matchesMediaType = selectedMediaType === 'all' || post.mediaType === selectedMediaType
