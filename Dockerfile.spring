@@ -1,0 +1,51 @@
+# Spring Boot Native Image Dockerfile
+# Multi-stage build for optimal image size
+
+# Stage 1: Build stage with GraalVM
+FROM ghcr.io/graalvm/graalvm-ce:ol8-java21-22.3.0 AS builder
+
+# Install required tools
+RUN microdnf update \
+    && microdnf install --nodocs \
+        tar \
+        gzip \
+        findutils \
+        git \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy Gradle wrapper and build files
+COPY gradlew .
+COPY gradle gradle/
+COPY build.gradle .
+COPY settings.gradle .
+
+# Make gradlew executable
+RUN chmod +x ./gradlew
+
+# Copy source code
+COPY src src/
+
+# Build the application with native image
+RUN ./gradlew nativeCompile --no-daemon
+
+# Stage 2: Runtime stage with minimal base image
+FROM gcr.io/distroless/base-debian12:nonroot
+
+# Copy the native executable from builder stage
+COPY --from=builder /workspace/build/native/nativeCompile/threadsapi /app/threadsapi
+
+# Set working directory
+WORKDIR /app
+
+# Expose port
+EXPOSE 10081
+
+# Use non-root user
+USER nonroot:nonroot
+
+# Run the native executable
+ENTRYPOINT ["./threadsapi"] 

@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # Spring Boot API Backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.spring
+    container_name: threads-api
+    ports:
+      - "10081:10081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=10081
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:10081/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - threads-network
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.nextjs
+    container_name: threads-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_BASE_URL=https://threads.tadeasfort.com
+      - PORT=3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - threads-network
+
+  # Nginx Reverse Proxy (Optional - for local development)
+  nginx:
+    image: nginx:alpine
+    container_name: threads-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - frontend
+    restart: unless-stopped
+    networks:
+      - threads-network
+
+networks:
+  threads-network:
+    driver: bridge
+    name: threads-network
+
+volumes:
+  api-data:
+    driver: local
